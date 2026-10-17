@@ -1,0 +1,14 @@
+'use strict';
+const assert=require('node:assert/strict');
+const c=require(require('./reference-codecs.cjs').granitePath());
+const {buildItemPrices}=require('./item-prices.cjs');
+const request=new c.Builder().AddU32(c.Crc32('ITEM_0'),123).AddU32(c.Crc32('ITEM_1'),456).Build();
+const fields=c.Parse(request.Body).Fields;
+const reply=c.Parse(buildItemPrices(fields).Build().Body).Fields;
+assert.equal(c.GetU32(reply,c.Crc32('ITEM_1')),456);
+for(let i=0;i<2;i++)for(const prefix of ['PRICE','FINAL_PRICE','MYTEAM_PRICE','FINAL_MYTEAM_PRICE'])assert.equal(c.GetU64(reply,c.Crc32(`${prefix}_${i}`)),0n);
+assert.throws(()=>buildItemPrices([]),/count/);
+const malformed=new c.Builder().AddU64(c.Crc32('ITEM_0'),123n).Build();
+assert.throws(()=>buildItemPrices(c.Parse(malformed.Body).Fields),/identifier/);
+assert.equal(c.GetU32(fields,c.Crc32('ITEM_0')),123);
+console.log('PASS: native indexed item prices, zero-cost policy, invalid request rejection');

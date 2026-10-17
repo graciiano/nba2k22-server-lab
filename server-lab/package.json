@@ -1,0 +1,16 @@
+{
+  "name": "nba2k22-server-lab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Experimental local NBA 2K22 protocol laboratory",
+  "scripts": {
+    "start": "node server.cjs --experimental-login",
+    "test": "node attribute-prices-test.cjs && node item-prices-test.cjs && node native-websocket-key-test.cjs && node public-smoke-test.cjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  }
+}

@@ -1,0 +1,14 @@
+'use strict';
+const assert=require('node:assert/strict');
+const c=require(require('./reference-codecs.cjs').granitePath());
+const {buildAttributePrices,F}=require('./attribute-prices.cjs');
+const request=new c.Builder().AddU32(F.name,123).AddU32(F.name,456).AddU64(F.level,73n).AddU64(F.level,75n).Build();
+const before=Buffer.from(request.Body),reply=c.Parse(buildAttributePrices(c.Parse(request.Body).Fields,{base:100n,step:25n}).Build().Body).Fields;
+const values=id=>reply.filter(f=>f.Crc===id).map(f=>(BigInt(f.Data1>>>0)<<32n)|BigInt(f.Data2>>>0));
+assert.deepEqual(values(F.level),[73n,75n]);assert.deepEqual(values(F.count),[2n,0n]);assert.deepEqual(values(F.to),[74n,75n]);
+assert.deepEqual(values(F.price),[1925n,1950n]);assert.deepEqual(values(F.price),values(F.second));assert.deepEqual(request.Body,before);
+const bad=new c.Builder().AddU32(F.name,1).AddU64(F.level,76n).Build();assert.throws(()=>buildAttributePrices(c.Parse(bad.Body).Fields),/range/);
+assert.throws(()=>buildAttributePrices([]),/paired/);
+const free=c.Parse(buildAttributePrices(c.Parse(request.Body).Fields).Build().Body).Fields;
+assert.ok(free.filter(f=>f.Crc===F.price||f.Crc===F.second).every(f=>f.Data1===0&&f.Data2===0));
+console.log('PASS: native 75-step bound, paired attribute levels, cumulative sections, laboratory costs and no request mutation');
