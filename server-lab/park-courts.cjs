@@ -268,6 +268,14 @@ function createHub(lab, log = () => {}) {
       teamSize: ghost ? 1 : court.g.n,
     };
     if (lockstep && hub.relay) hub.relay.allow(court.game.token, court.game.relayId, players.map(p => p.machine || p.puid));
+    if (ghost && players[0] && players[0].body) {
+      // O jogo só sai do estado "reconstruindo jogadores" (SESSION 0x11) quando todos os PUIDs dos
+      // times têm objeto PLAYER. Publica a cópia como um PLAYER próprio, já em PLAYING nessa quadra.
+      const owner = players[0], body = Buffer.from(owner.body);
+      body.writeBigUInt64BE(ghost.puid, 0); body.writeBigUInt64BE(1n, 8); body.writeBigUInt64LE(ghost.puid, 37);
+      body.writeUInt32LE(S.STATE.PLAYING >>> 0, 69); body.writeUInt32LE(court.id, 73);
+      ghost.body = body; owner.send(S.wrapObject(ghost.puid, S.CLASS.Player, body, owner.connection));
+    }
     hub.broadcastCourt(court);
     for (const p of players) hub.setState(p, S.STATE.PLAYING, court);
     log({ event: 'park-game-start', court: court.def.name, home: home.length, away: away.length, lockstep, userdata: players.filter(p => p.userdata).length });
@@ -293,6 +301,11 @@ function createHub(lab, log = () => {}) {
     if (hub.relay) hub.relay.forget(game.token);
     hub.broadcastCourt(court);
     for (const id of all) { const p = hub.byPuid(id); if (p) hub.setState(p, S.STATE.WALKING, null); }
+    if (game.ghost && game.ghost.body) {
+      const owner = hub.byPuid(game.home[0]), b = game.ghost.body;
+      b.writeBigUInt64BE(b.readBigUInt64BE(8) + 1n, 8); b.writeUInt32LE(S.STATE.WALKING >>> 0, 69); b.writeUInt32LE(0, 73);
+      if (owner) owner.send(S.wrapObject(game.ghost.puid, S.CLASS.Player, b, owner.connection));
+    }
     log({ event: 'park-game-end', court: court.def.name, reason, result: result === undefined ? null : '0x' + (result >>> 0).toString(16) });
   };
 
