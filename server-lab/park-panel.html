@@ -85,7 +85,7 @@ async function act(path){try{await post(path);}catch(e){$('msg').textContent=e.m
 async function refresh(){
   try{
     const s=await (await fetch('/park/status',{cache:'no-store'})).json();
-    const h=s.config.heading||{};$('heading').textContent=h.r!==undefined?(h.r>0.8?`Direção calibrada (confiança ${(h.r*100|0)}%).`:`Direção ainda incerta (${(h.r*100|0)}%) — ande mais em linha reta.`):`Direção: ande pelo Park (${h.samples||0}/20 amostras).`;
+    const h=s.heading||s.config.heading||{};$('heading').textContent=h.r!==undefined?(h.r>0.8?`Direção calibrada (confiança ${(h.r*100|0)}%).`:`Direção ainda incerta (${(h.r*100|0)}%) — ande mais em linha reta.`):`Direção: ande pelo Park (${h.samples||0}/20 amostras).`;
     $('players').innerHTML=s.players.map(p=>`<tr><td>${p.peer}</td><td>${p.inPark?'sim':'não'}</td><td>${STATES[p.state]||p.state||'—'}</td><td><code>${p.position?[p.position.x,p.position.y,p.position.z].join(', '):'—'}</code></td><td>${p.userdata?'<span class=ok>ok</span>':'—'}</td></tr>`).join('')||'<tr><td colspan=5>Nenhum jogador conectado.</td></tr>';
     $('courts').innerHTML=s.courts.map(c=>`<tr><td>${c.name}</td><td>${c.teamSize}v${c.teamSize}</td><td>${c.courtType}</td><td>${c.home}/${c.teamSize}</td><td>${c.away}/${c.teamSize}</td><td>${c.playing?'estado '+c.objectState:'—'}</td><td><button onclick="act('/park/end?court=${encodeURIComponent(c.name)}')">Encerrar</button><button onclick="if(confirm('Remover ${c.name}?'))act('/park/remove?court=${encodeURIComponent(c.name)}')">Remover</button></td></tr>`).join('')||'<tr><td colspan=7>Nenhuma quadra calibrada.</td></tr>';
   }catch(e){$('msg').textContent='Servidor indisponível: '+e.message;}
