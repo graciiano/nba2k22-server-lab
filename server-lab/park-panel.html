@@ -29,9 +29,9 @@ code{font-size:13px}ol{margin:0;padding-left:20px}li{margin:3px 0}
 <section>
 <h2>Como calibrar uma quadra</h2>
 <ol>
-<li>No jogo, ande até o <b>centro</b> da quadra (meio da linha do lance livre / garrafão) e clique em <b>Centro</b>.</li>
-<li>Pare <b>embaixo da cesta</b> e clique em <b>Cesta</b> (define a orientação).</li>
-<li>Pare onde o time da casa deve esperar (lateral) e clique em <b>Casa</b>; repita do outro lado para <b>Visitante</b>.</li>
+<li>A quadra tem parede (igual ao oficial) — não precisa entrar. Fique do lado de fora, onde ficavam os <b>spots</b> do time da casa, e clique em <b>Casa</b>.</li>
+<li>Vá para onde ficavam os spots do outro time e clique em <b>Visitante</b>. Com esses dois pontos a quadra já é publicada (centro = meio entre eles).</li>
+<li>Opcional: <b>Centro</b> e <b>Cesta</b> refinam a posição e a orientação, se der para chegar perto.</li>
 <li>Os tapetes aparecem nesses pontos. Pise neles para pedir “Got Next”.</li>
 </ol>
 </section>
@@ -68,7 +68,7 @@ async function post(path){const r=await fetch(path,{method:'POST'});const j=awai
 document.querySelectorAll('button[data-p]').forEach(b=>b.onclick=async()=>{
   const q=new URLSearchParams({court:$('court').value.trim(),point:b.dataset.p,teamSize:$('team').value});
   if($('ctype').value.trim())q.set('courtType',$('ctype').value.trim());
-  try{const j=await post('/park/mark?'+q);$('msg').textContent=`Ponto “${b.textContent}” salvo para ${j.court.name}`+(j.published?' — quadra publicada.':' — falta o centro.');}catch(e){$('msg').textContent=e.message;}
+  try{const j=await post('/park/mark?'+q);$('msg').textContent=`Ponto “${b.textContent}” salvo para ${j.court.name}`+(j.published?' — quadra publicada.':' — falta Casa ou Visitante.');}catch(e){$('msg').textContent=e.message;}
   refresh();
 });
 $('reload').onclick=async()=>{try{const j=await post('/park/reload');$('msg').textContent=`${j.courts} quadra(s) republicada(s).`;}catch(e){$('msg').textContent=e.message;}};

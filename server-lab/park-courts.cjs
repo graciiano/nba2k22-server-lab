@@ -38,11 +38,23 @@ function courtId(name) { return (zlib.crc32 ? zlib.crc32('PARK_COURT_' + name) :
 function crcFallback(text) { let c = ~0; for (const ch of Buffer.from(text)) { c ^= ch; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; } return ~c >>> 0; }
 const courtKey = id => (0x5041524bn << 32n) | BigInt(id >>> 0); // 'PARK' << 32 | id
 
+// A quadra do Park tem colisão em volta (normal também no servidor oficial): ninguém entra andando.
+// Por isso o centro é opcional — sem ele usamos o meio entre os dois pontos de espera (Casa/Visitante),
+// que ficam do lado de fora, onde ficavam os tapetes de Got Next.
+const isPoint = v => Array.isArray(v) && v.length === 3 && v.every(Number.isFinite);
+function centerOf(def) {
+  if (isPoint(def.center)) return def.center.map(Number);
+  if (isPoint(def.home) && isPoint(def.away)) return mul(add(def.home, def.away), 0.5);
+  return null;
+}
 function geometry(def) {
-  if (!Array.isArray(def.center) || def.center.length !== 3) throw new Error(`Court ${def.name} has no center`);
+  const center = centerOf(def);
+  if (!center) throw new Error(`Court ${def.name} has no center (marque Centro, ou Casa e Visitante)`);
   const n = Math.max(1, Math.min(5, def.teamSize | 0 || 3));
-  const pos = def.center.map(Number);
-  const forward = flatUnit(def.basket ? sub(def.basket, pos) : [0, 0, 1]);
+  const pos = center;
+  // Sem cesta marcada: a quadra corre perpendicular à linha Casa→Visitante.
+  const across = isPoint(def.home) && isPoint(def.away) ? flatUnit(sub(def.away, def.home), null) : null;
+  const forward = isPoint(def.basket) ? flatUnit(sub(def.basket, pos)) : across ? [-across[2], 0, across[0]] : [0, 0, 1];
   const right = [forward[2], 0, -forward[0]];
   const marks = [def.home || add(pos, mul(right, -842)), def.away || add(pos, mul(right, 842))];
   const queues = marks.map((mark, index) => {
@@ -101,7 +113,7 @@ function createHub(lab, log = () => {}) {
     hub.config = loadConfig(lab);
     const keep = new Set();
     for (const def of hub.config.courts) {
-      if (!def || !def.name || !def.center) continue;
+      if (!def || !def.name || !centerOf(def)) continue;
       const id = courtId(def.name), key = courtKey(id); keep.add(key);
       const g = geometry(def), old = hub.courts.get(key);
       hub.courts.set(key, {
@@ -275,7 +287,7 @@ function createHub(lab, log = () => {}) {
   hub.status = () => ({
     config: { presence: hub.config.presence, soloStart: hub.config.soloStart, relay: hub.config.relay },
     players: [...hub.peers.values()].filter(p => !p.closed).map(p => ({ peer: p.id, inPark: p.inPark, handshake: !!p.body, userdata: !!p.userdata, state: p.state ? '0x' + p.state.toString(16) : null, position: p.position, puidHash: p.puid ? crypto.createHash('sha256').update(String(p.puid)).digest('hex').slice(0, 8) : null })),
-    courts: [...hub.courts.values()].map(c => ({ name: c.def.name, id: '0x' + c.id.toString(16), teamSize: c.g.n, courtType: c.def.courtType ?? COURT_TYPE_BY_TEAM[c.g.n], center: c.def.center, hasBasket: !!c.def.basket, home: c.queues[0].filter(Boolean).length, away: c.queues[1].filter(Boolean).length, playing: !!c.game, objectState: c.game ? c.game.objectState : 0 })),
+    courts: [...hub.courts.values()].map(c => ({ name: c.def.name, id: '0x' + c.id.toString(16), teamSize: c.g.n, courtType: c.def.courtType ?? COURT_TYPE_BY_TEAM[c.g.n], center: c.g.pos.map(v => Math.round(v)), centerMarked: isPoint(c.def.center), hasBasket: !!c.def.basket, home: c.queues[0].filter(Boolean).length, away: c.queues[1].filter(Boolean).length, playing: !!c.game, objectState: c.game ? c.game.objectState : 0 })),
   });
 
   hub.attach = (send, label) => createPeer(hub, send, label);

@@ -47,6 +47,9 @@ const u8 = b => b[0], u32 = b => b.readUInt32LE(0), u64 = b => b.readBigUInt64LE
   // Geometry: facing points to the court, corners enclose the spot line.
   const g = geometry({ name: 'G', teamSize: 2, center: [0, 0, 0], basket: [0, 0, 600], home: [-850, 0, 0], away: [850, 0, 0] });
   assert.equal(g.queues[0].facing, 16384); assert.equal(g.queues[1].facing, -16384);
+  // Sem centro (a quadra tem parede): centro = meio entre Casa e Visitante, mesma orientação.
+  const g2 = geometry({ name: 'H', teamSize: 2, home: [-850, 0, 0], away: [850, 0, 0] });
+  assert.deepEqual(g2.pos, [0, 0, 0]); assert.equal(g2.queues[0].facing, 16384); assert.equal(g2.queues[1].facing, -16384);
 
   // ---- 1v1 lockstep game between two clients ----
   write({ presence: true, soloStart: false, readyTimeoutMs: 60000, courts: [{ name: 'A', teamSize: 1, center: [100, 0, 200], basket: [100, 0, 900] }] });
