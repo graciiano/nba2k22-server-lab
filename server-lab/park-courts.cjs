@@ -68,6 +68,12 @@ function geometry(def) {
       const middle = add(first, mul(side, spacing * (n - 1) / 2));
       const perp = [-side[2], 0, side[0]], away = sub(pos, middle);
       toCourt = Math.hypot(away[0], away[2]) > 50 && perp[0] * away[0] + perp[2] * away[2] < 0 ? mul(perp, -1) : perp;
+    } else if (Array.isArray(def[index ? 'awayFacing' : 'homeFacing'])) {
+      // Um clique por lado: o jogador pára encostado na faixa OLHANDO para a quadra.
+      // A fileira fica perpendicular ao olhar, centrada onde ele está.
+      toCourt = flatUnit(def[index ? 'awayFacing' : 'homeFacing']);
+      side = [toCourt[2], 0, -toCourt[0]];
+      first = sub(mark, mul(side, STEP * (n - 1) / 2));
     } else {
       toCourt = flatUnit(sub(pos, mark), index ? mul(right, -1) : right);
       side = [toCourt[2], 0, -toCourt[0]];
@@ -158,7 +164,7 @@ function createHub(lab, log = () => {}) {
     const values = {
       Name: S.u32(court.id), IsActiveFlag: S.u8(1), Transform: transform(g),
       ObjectState: S.u32(game ? game.objectState : 0), IsLockstep: S.u8(game && game.lockstep ? 1 : 0),
-      CourtType: S.u32(court.def.courtType ?? COURT_TYPE_BY_TEAM[n] ?? 4), FlipDirectionOfPlay: S.u8(court.def.flip ? 1 : 0),
+      CourtType: S.u32(game && game.ghost ? (court.def.soloCourtType ?? COURT_TYPE_BY_TEAM[1]) : (court.def.courtType ?? COURT_TYPE_BY_TEAM[n] ?? 4)), FlipDirectionOfPlay: S.u8(court.def.flip ? 1 : 0),
       IsHalfCourt: S.u8(court.def.halfCourt === false ? 0 : 1), StartType: S.u32(0),
       NumberOfAwayTeam: S.u8(game ? game.away.length : 0), AwayTeam: team(game ? game.away : []),
       AwayTeamConfirmed: flags(game ? game.away : [], 1), AwayTeamPrepared: flags(game ? game.away : [], 1),
@@ -168,7 +174,7 @@ function createHub(lab, log = () => {}) {
       NumberOfGotNextSpots: S.u8(2), GotNextSpots: court.queues.map(spotRecord), GotNextSpotsSetup: g.queues.map(setupRecord),
       WinnerStartLocation: S.vec4(...g.queues[0].first, 1), WinnerOffset: S.vec4(...g.queues[0].step, 0), WinnerFacing: S.i32(g.queues[0].facing),
       LoserStartLocation: S.vec4(...g.queues[1].exit, 1), LoserOffset: S.vec4(...g.queues[1].step, 0), LoserFacing: S.i32(g.queues[1].facing),
-      HomeSpotCount: S.u8(n), AwaySpotCount: S.u8(n), UtilityPlayerCount: S.u8(0),
+      HomeSpotCount: S.u8(game ? game.teamSize : n), AwaySpotCount: S.u8(game ? game.teamSize : n), UtilityPlayerCount: S.u8(0),
     };
     if (game) {
       Object.assign(values, {
@@ -178,9 +184,10 @@ function createHub(lab, log = () => {}) {
       if (game.lockstep) Object.assign(values, {
         Uuid: game.token, Address: S.u32(ipv4(hub.config.relay.address)), Port: S.u16(hub.config.relay.port), VPort: S.u16(game.relayId),
       });
-      const blobs = list => list.map(id => { const p = hub.byPuid(id); return p && p.userdata ? S.blob(p.userdata) : undefined; });
-      if (game.home.some(id => hub.byPuid(id)?.userdata)) values.HomeUserData = blobs(game.home);
-      if (game.away.some(id => hub.byPuid(id)?.userdata)) values.AwayUserData = blobs(game.away);
+      const dataOf = id => game.ghost && id === game.ghost.puid ? game.ghost.userdata : hub.byPuid(id)?.userdata;
+      const blobs = list => list.map(id => { const d = dataOf(id); return d ? S.blob(d) : undefined; });
+      if (game.home.some(dataOf)) values.HomeUserData = blobs(game.home);
+      if (game.away.some(dataOf)) values.AwayUserData = blobs(game.away);
     }
     court.version += 1n;
     return S.wrapObject(court.key, S.CLASS.Court, S.encodeCourt(court.key, court.version, values), peer.connection);
@@ -238,19 +245,27 @@ function createHub(lab, log = () => {}) {
       if (court.game) return;
       const h = court.queues[0].filter(Boolean), a = court.queues[1].filter(Boolean);
       if (!(h.length === court.g.n && a.length === court.g.n) && !(solo && h.length + a.length === 1)) return;
-      hub.startGame(court, solo ? [...h, ...a] : h, solo ? [] : a, !solo);
+      if (solo) {
+        // Jogo de time com um time vazio dispara AI_FillInGameDescription "Inconsistent game setup,
+        // impending crash" (0x1419746D0) e o jogo fecha. Sozinho: 1x1 contra uma cópia do próprio
+        // jogador (mesmo USERDATA, PUID diferente), sem lockstep.
+        const me = [...h, ...a][0], owner = hub.byPuid(me);
+        const ghost = { puid: (me ^ 0x0000000040000000n) || 1n, userdata: owner && owner.userdata };
+        hub.startGame(court, [me], [ghost.puid], false, ghost);
+      } else hub.startGame(court, h, a, true);
     };
     if (solo) { const t = setTimeout(begin, hub.config.soloDelayMs); t.unref?.(); } else begin();
     return true;
   };
 
-  hub.startGame = (court, home, away, lockstep) => {
-    const players = [...home, ...away].map(id => hub.byPuid(id));
+  hub.startGame = (court, home, away, lockstep, ghost = null) => {
+    const players = [...home, ...away].filter(id => !ghost || id !== ghost.puid).map(id => hub.byPuid(id));
     if (players.some(p => !p || !p.body)) { log({ event: 'park-start-withheld', reason: 'participant-missing', court: court.def.name }); return false; }
     court.game = {
       home, away, lockstep, objectState: lockstep ? 2 : 3, matchId: crypto.randomBytes(8).readBigUInt64BE() || 1n,
       seed: crypto.randomBytes(8).readBigUInt64BE(), token: crypto.randomBytes(16), relayId: (crypto.randomBytes(2).readUInt16BE() & 0x7fff) | 1,
-      startedAt: Math.floor(Date.now() / 1000), ready: new Set(),
+      startedAt: Math.floor(Date.now() / 1000), ready: new Set(), ghost,
+      teamSize: ghost ? 1 : court.g.n,
     };
     if (lockstep && hub.relay) hub.relay.allow(court.game.token, court.game.relayId, players.map(p => p.machine || p.puid));
     hub.broadcastCourt(court);
@@ -281,6 +296,26 @@ function createHub(lab, log = () => {}) {
     log({ event: 'park-game-end', court: court.def.name, reason, result: result === undefined ? null : '0x' + (result >>> 0).toString(16) });
   };
 
+  // ---------- heading (u8 no pacote de movimento) -> direção no mundo ----------
+  // Aprendido andando: compara o ângulo do deslocamento com o heading. Testa sentido e deslocamento.
+  hub.heading = { samples: [], fit: null };
+  hub.learnHeading = (dx, dz, h) => {
+    if (Math.hypot(dx, dz) < 8) return;
+    const H = hub.heading; H.samples.push([Math.atan2(dx, dz), h * Math.PI / 128]); if (H.samples.length > 400) H.samples.shift();
+    if (H.samples.length < 20) return;
+    let best = null;
+    for (const sign of [1, -1]) {
+      let c = 0, sn = 0; for (const [m, a] of H.samples) { const d = m - sign * a; c += Math.cos(d); sn += Math.sin(d); }
+      const r = Math.hypot(c, sn) / H.samples.length, offset = Math.atan2(sn, c);
+      if (!best || r > best.r) best = { sign, offset, r, n: H.samples.length };
+    }
+    H.fit = best;
+  };
+  hub.facingOf = h => {
+    const f = hub.heading.fit, a = f && f.r > 0.8 ? f.sign * h * Math.PI / 128 + f.offset : h * Math.PI / 128;
+    return [Math.sin(a), 0, Math.cos(a)];
+  };
+
   // ---------- calibration ----------
   hub.mark = ({ court: name, point, teamSize, courtType, inset, puid }) => {
     if (!/^[A-Za-z0-9_-]{1,24}$/.test(String(name || ''))) throw new Error('Nome de quadra inválido (use letras/números, até 24)');
@@ -291,6 +326,11 @@ function createHub(lab, log = () => {}) {
     let def = config.courts.find(c => c.name === name);
     if (!def) { def = { name, teamSize: 3 }; config.courts.push(def); }
     def[point] = [source.position.x, source.position.y, source.position.z];
+    if (point === 'home' || point === 'away') {
+      const f = hub.facingOf(source.position.heading).map(v => Math.round(v * 1000) / 1000);
+      def[point + 'Facing'] = f; delete def[point + 'End'];
+    }
+    if (point === 'homeEnd' || point === 'awayEnd') delete def[point.replace('End', 'Facing')];
     if (teamSize) def.teamSize = Math.max(1, Math.min(5, Number(teamSize) | 0));
     if (courtType !== undefined && courtType !== '') def.courtType = Number(courtType) >>> 0;
     if (inset !== undefined && inset !== '' && Number.isFinite(Number(inset))) def.inset = Math.max(-500, Math.min(800, Number(inset)));
@@ -312,7 +352,7 @@ function createHub(lab, log = () => {}) {
     saveConfig(lab, config); return hub.reload();
   };
   hub.status = () => ({
-    config: { presence: hub.config.presence, soloStart: hub.config.soloStart, relay: hub.config.relay },
+    config: { presence: hub.config.presence, soloStart: hub.config.soloStart, relay: hub.config.relay }, heading: hub.heading.fit ? { ...hub.heading.fit, offset: Math.round(hub.heading.fit.offset * 180 / Math.PI) } : { samples: hub.heading.samples.length },
     players: [...hub.peers.values()].filter(p => !p.closed).map(p => ({ peer: p.id, inPark: p.inPark, handshake: !!p.body, userdata: !!p.userdata, state: p.state ? '0x' + p.state.toString(16) : null, position: p.position, puidHash: p.puid ? crypto.createHash('sha256').update(String(p.puid)).digest('hex').slice(0, 8) : null })),
     courts: [...hub.courts.values()].map(c => ({ name: c.def.name, id: '0x' + c.id.toString(16), teamSize: c.g.n, courtType: c.def.courtType ?? COURT_TYPE_BY_TEAM[c.g.n], inset: c.def.inset ?? 0, center: c.g.pos.map(v => Math.round(v)), centerMarked: isPoint(c.def.center), hasBasket: !!c.def.basket, home: c.queues[0].filter(Boolean).length, away: c.queues[1].filter(Boolean).length, playing: !!c.game, objectState: c.game ? c.game.objectState : 0 })),
   });
@@ -360,6 +400,8 @@ function createPeer(hub, send, label) {
   function movement(bytes) {
     const pos = { x: bytes.readInt16BE(16), y: bytes.readInt16BE(18), z: bytes.readInt16BE(20), heading: bytes[22], at: Date.now() };
     if (Math.abs(pos.x) > 10000 && pos.x === pos.y && pos.y === pos.z) return null; // "nowhere" sentinel
+    const last = peer.position;
+    if (last && Date.now() - last.at < 500) hub.learnHeading(pos.x - last.x, pos.z - last.z, pos.heading);
     peer.position = pos; hub.lastMover = peer;
     if (hub.config.presence && peer.puid) {
       const body = Buffer.alloc(11); body[0] = 0xc0; body.writeInt16BE(pos.x, 4); body.writeInt16BE(pos.y, 6); body.writeInt16BE(pos.z, 8); body[10] = pos.heading;

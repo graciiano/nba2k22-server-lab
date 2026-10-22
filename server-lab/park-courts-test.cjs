@@ -57,6 +57,9 @@ const u8 = b => b[0], u32 = b => b.readUInt32LE(0), u64 = b => b.readBigUInt64LE
   const g4 = geometry({ name: 'I', teamSize: 3, inset: 200, home: [1000, 0, -300], homeEnd: [1000, 0, 300], away: [-1000, 0, -300], awayEnd: [-1000, 0, 300] });
   assert.deepEqual(g4.queues[0].first.map(Math.round), [800, 0, -300]);
   const xs = g4.queues[0].corners.map(c => Math.round(c[0])); assert.equal(Math.max(...xs), 1150); assert.equal(Math.min(...xs), 700);
+  // Um clique por lado: fileira perpendicular ao olhar, tapete recuado na direção do olhar.
+  const g5 = geometry({ name: 'F', teamSize: 3, inset: 100, home: [0, 0, 0], homeFacing: [1, 0, 0], away: [1000, 0, 0], awayFacing: [-1, 0, 0] });
+  assert.deepEqual(g5.queues[0].first.map(Math.round), [100, 0, 120]); assert.equal(g5.queues[0].facing, 16384); assert.equal(g5.queues[1].facing, -16384);
   assert.deepEqual(g2.pos, [0, 0, 0]); assert.equal(g2.queues[0].facing, 16384); assert.equal(g2.queues[1].facing, -16384);
 
   // ---- 1v1 lockstep game between two clients ----
@@ -132,6 +135,10 @@ const u8 = b => b[0], u32 = b => b.readUInt32LE(0), u64 = b => b.readBigUInt64LE
   const soloGame = courts(s.sent).find(x => u8(x.fields.GamePreparedValid) === 1);
   assert.ok(soloGame, 'solo game prepared'); assert.equal(u8(soloGame.fields.IsLockstep), 0); assert.equal(u32(soloGame.fields.ObjectState), 3);
   assert.equal(players(s.sent).at(-1).state, S.STATE.PLAYING);
+  // Sozinho: 1x1 contra uma cópia (nunca time vazio — isso derruba o jogo).
+  assert.equal(u8(soloGame.fields.NumberOfHomeTeam), 1); assert.equal(u8(soloGame.fields.NumberOfAwayTeam), 1);
+  assert.equal(u8(soloGame.fields.HomeSpotCount), 1); assert.equal(u8(soloGame.fields.AwaySpotCount), 1);
+  assert.notEqual(soloGame.fields['AwayTeam[0]'].readBigUInt64LE(0), 0n);
 
   // ---- real 2K22 movement capture, if available ----
   const capture = process.env.PARK_MOVEMENT_CAPTURE;

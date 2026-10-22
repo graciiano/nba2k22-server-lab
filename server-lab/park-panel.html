@@ -29,8 +29,10 @@ code{font-size:13px}ol{margin:0;padding-left:20px}li{margin:3px 0}
 <section>
 <h2>Como calibrar uma quadra</h2>
 <ol>
-<li>A quadra e a faixa azul têm parede (igual ao oficial). Encoste na faixa, na altura do <b>1º spot</b> do time da casa → <b>Casa 1º spot</b>; na altura do <b>último spot</b> → <b>Casa último</b>. Os tapetes vão para dentro da faixa pelo <b>recuo</b>; você aperta X do lado de fora e o jogo te leva até o tapete.</li>
-<li>Repita na fileira do outro time: <b>Visitante 1º spot</b> e <b>Visitante último</b>. Os spots são distribuídos entre as duas pontas.</li>
+<li>Antes: ande uns segundos em linha reta pelo Park (o servidor aprende para onde o boneco olha — veja “Direção” abaixo).</li>
+<li>Pare encostado na faixa azul, <b>no meio</b> de onde ficavam os spots do time da casa, <b>olhando para a quadra</b> → <b>Casa</b>.</li>
+<li>Faça o mesmo do lado do outro time → <b>Visitante</b>. Os tapetes aparecem na sua frente, dentro da faixa (ajuste com <b>Recuo</b>).</li>
+<li>Opcional: “fim da fileira” marca o último spot, se preferir definir a fileira por duas pontas.</li>
 <li>Opcional: <b>Centro</b> e <b>Cesta</b> refinam a posição e a orientação, se der para chegar perto.</li>
 <li>Os tapetes aparecem nesses pontos. Pise neles para pedir “Got Next”.</li>
 </ol>
@@ -45,14 +47,15 @@ code{font-size:13px}ol{margin:0;padding-left:20px}li{margin:3px 0}
 <div>
 <button class="primary" data-p="center">Centro</button>
 <button class="primary" data-p="basket">Cesta</button>
-<button class="primary" data-p="home">Casa 1º spot</button>
-<button class="primary" data-p="homeEnd">Casa último</button>
-<button class="primary" data-p="away">Visitante 1º spot</button>
-<button class="primary" data-p="awayEnd">Visitante último</button>
+<button class="primary" data-p="home">Casa</button>
+<button class="primary" data-p="away">Visitante</button>
+<button data-p="homeEnd">Casa: fim da fileira</button>
+<button data-p="awayEnd">Visitante: fim da fileira</button>
 <button id="applyInset">Aplicar recuo</button>
 <button id="reload">Republicar quadras</button>
 </div>
 <div id="msg"></div>
+<div id="heading" class="muted"></div>
 </section>
 
 <section>
@@ -82,6 +85,7 @@ async function act(path){try{await post(path);}catch(e){$('msg').textContent=e.m
 async function refresh(){
   try{
     const s=await (await fetch('/park/status',{cache:'no-store'})).json();
+    const h=s.config.heading||{};$('heading').textContent=h.r!==undefined?(h.r>0.8?`Direção calibrada (confiança ${(h.r*100|0)}%).`:`Direção ainda incerta (${(h.r*100|0)}%) — ande mais em linha reta.`):`Direção: ande pelo Park (${h.samples||0}/20 amostras).`;
     $('players').innerHTML=s.players.map(p=>`<tr><td>${p.peer}</td><td>${p.inPark?'sim':'não'}</td><td>${STATES[p.state]||p.state||'—'}</td><td><code>${p.position?[p.position.x,p.position.y,p.position.z].join(', '):'—'}</code></td><td>${p.userdata?'<span class=ok>ok</span>':'—'}</td></tr>`).join('')||'<tr><td colspan=5>Nenhum jogador conectado.</td></tr>';
     $('courts').innerHTML=s.courts.map(c=>`<tr><td>${c.name}</td><td>${c.teamSize}v${c.teamSize}</td><td>${c.courtType}</td><td>${c.home}/${c.teamSize}</td><td>${c.away}/${c.teamSize}</td><td>${c.playing?'estado '+c.objectState:'—'}</td><td><button onclick="act('/park/end?court=${encodeURIComponent(c.name)}')">Encerrar</button><button onclick="if(confirm('Remover ${c.name}?'))act('/park/remove?court=${encodeURIComponent(c.name)}')">Remover</button></td></tr>`).join('')||'<tr><td colspan=7>Nenhuma quadra calibrada.</td></tr>';
   }catch(e){$('msg').textContent='Servidor indisponível: '+e.message;}

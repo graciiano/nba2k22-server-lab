@@ -13,7 +13,7 @@
 #include "MinHook.h"
 
 static const uintptr_t RVA_LOGGER = 0x1e645b0, RVA_FLAG = 0x4b5b4bc;
-static const int MAX_PER_FMT = 40;
+static const int MAX_PER_FMT = 200;
 using LogFn = void(__fastcall*)(const char*, const char*, int, const char*, const wchar_t*, void*, void*, void*);
 static LogFn original;
 static uintptr_t base;
@@ -61,7 +61,8 @@ static void __fastcall hook(const char* file, const char* func, int line, const 
   DWORD err = GetLastError();
   uintptr_t caller = (uintptr_t)__builtin_return_address(0) - base;
   EnterCriticalSection(&lock);
-  if (out && bump(fmt) <= MAX_PER_FMT) {
+  bool always = readable(channel, 4) && (strstr(channel, "ASSERT") || strstr(channel, "ERROR") || strstr(channel, "CRASH"));
+  if (out && (always || bump(fmt) <= MAX_PER_FMT)) {
     fprintf(out, "%llu c=%llx [%s] %s:%d ", (unsigned long long)GetTickCount64(), (unsigned long long)caller, readable(channel, 1) ? channel : "?", readable(func, 1) ? func : "?", line);
     if (readable(fmt, 2)) putWide(fmt, 400);
     if (readable(args, 8)) {
@@ -71,10 +72,30 @@ static void __fastcall hook(const char* file, const char* func, int line, const 
       for (unsigned i = 0; i < count && readable(pairs + 2 * i, 16); i++) putArg(pairs[2 * i], pairs[2 * i + 1]);
     }
     fputc('\n', out);
+    if (always) fflush(out);
   }
   LeaveCriticalSection(&lock);
   SetLastError(err);
   original(file, func, line, channel, fmt, args, a7, a8);
+}
+// Exceções (1ª chance) graves: registra código, RVA e grava o log já, antes de o jogo fechar.
+static LONG CALLBACK onException(PEXCEPTION_POINTERS e) {
+  static volatile LONG count = 0;
+  DWORD code = e->ExceptionRecord->ExceptionCode;
+  if ((code == EXCEPTION_ACCESS_VIOLATION || code == EXCEPTION_ILLEGAL_INSTRUCTION || code == EXCEPTION_INT_DIVIDE_BY_ZERO || code == 0xC0000409 || code == EXCEPTION_STACK_OVERFLOW) && InterlockedIncrement(&count) <= 20) {
+    uintptr_t at = (uintptr_t)e->ExceptionRecord->ExceptionAddress;
+    EnterCriticalSection(&lock);
+    if (out) {
+      fprintf(out, "%llu EXCEPTION code=%08lx rva=%llx info=%llx,%llx rsp=%llx\n", (unsigned long long)GetTickCount64(), code,
+        (unsigned long long)(at - base), (unsigned long long)e->ExceptionRecord->ExceptionInformation[0], (unsigned long long)e->ExceptionRecord->ExceptionInformation[1], (unsigned long long)e->ContextRecord->Rsp);
+      // pilha: endereços dentro do executável
+      uintptr_t* sp = (uintptr_t*)e->ContextRecord->Rsp; int shown = 0;
+      for (int i = 0; i < 512 && shown < 24 && readable(sp + i, 8); i++) { uintptr_t v = sp[i]; if (v > base + 0x1000 && v < base + 0x3000000) { fprintf(out, "  stack rva=%llx\n", (unsigned long long)(v - base)); shown++; } }
+      fflush(out);
+    }
+    LeaveCriticalSection(&lock);
+  }
+  return EXCEPTION_CONTINUE_SEARCH;
 }
 static DWORD WINAPI flusher(LPVOID) {
   for (;;) {
@@ -96,6 +117,7 @@ static DWORD start() {
   if (MH_CreateHook((void*)(base + RVA_LOGGER), (void*)hook, (void**)&original) != MH_OK) return 5;
   if (MH_EnableHook((void*)(base + RVA_LOGGER)) != MH_OK) return 6;
   *(volatile DWORD*)(base + RVA_FLAG) = 1;
+  AddVectoredExceptionHandler(1, onException);
   HANDLE t = CreateThread(nullptr, 0, flusher, nullptr, 0, nullptr); if (t) CloseHandle(t);
   return 0;
 }
