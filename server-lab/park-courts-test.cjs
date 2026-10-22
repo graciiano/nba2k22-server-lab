@@ -67,6 +67,8 @@ const u8 = b => b[0], u32 = b => b.readUInt32LE(0), u64 = b => b.readBigUInt64LE
   assert.deepEqual(g6.queues[1].first.map(Math.round), [700, 0, 650]); assert.equal(g6.queues[1].facing, -16384);
   const g7 = geometry({ name: 'K', teamSize: 3, inset: 100, along: 0.55, spacing: 120, endA: [0, 0, -1400], endB: [0, 0, 1400], lateral: [800, 0, 0], sameSide: false });
   assert.deepEqual(g7.queues[1].first.map(Math.round), [-700, 0, 650]); assert.equal(g7.queues[1].facing, 16384);
+  const g8 = geometry({ name: 'K', teamSize: 3, inset: 100, along: 0.55, spacing: 120, endA: [0, 0, -1400], endB: [0, 0, 1400], lateral: [800, 0, 0], offsets: [[10, 5], [0, 0]] });
+  assert.deepEqual(g8.queues[0].first.map(Math.round), [695, 0, -880]); assert.deepEqual(g8.queues[1].first.map(Math.round), [700, 0, 650]);
   assert.deepEqual(g2.pos, [0, 0, 0]); assert.equal(g2.queues[0].facing, 16384); assert.equal(g2.queues[1].facing, -16384);
 
   // ---- 1v1 lockstep game between two clients ----

@@ -68,9 +68,11 @@ function courtLayout(def) {
   // cesta, na faixa azul. sameSide=false espelha o time 2 para a lateral oposta.
   const sameSide = def.sameSide !== false;
   const rows = [[sideA, -1], [sameSide ? sideA : -sideA, 1]];
-  const queues = rows.map(([side, end]) => {
+  const offsets = Array.isArray(def.offsets) ? def.offsets : [];
+  const queues = rows.map(([side, end], index) => {
     const toCourt = mul(right, -side);                       // de fora da lateral para dentro
-    const middle = add(add(pos, mul(forward, end * halfLen * along)), mul(right, side * (halfW - inset)));
+    const [du, dv] = Array.isArray(offsets[index]) ? offsets[index].map(Number) : [0, 0];   // ajuste fino do painel (setas)
+    const middle = add(add(add(pos, mul(forward, end * halfLen * along + (du || 0))), mul(right, side * (halfW - inset))), mul(toCourt, dv || 0));
     const first = sub(middle, mul(forward, spacing * (n - 1) / 2));
     const walk = add(first, mul(toCourt, -(inset + 60)));    // corredor, onde o jogador aperta X
     const length = spacing * (n - 1) + 40;
@@ -394,6 +396,22 @@ function createHub(lab, log = () => {}) {
     if (opts.spacing !== undefined && opts.spacing !== '') { const v = Number(opts.spacing); if (Number.isFinite(v)) def.spacing = Math.max(10, Math.min(300, v)); }
     if (opts.sameSide !== undefined && opts.sameSide !== '') def.sameSide = opts.sameSide === true || opts.sameSide === '1' || opts.sameSide === 'true';
     if (opts.teamSize) def.teamSize = Math.max(1, Math.min(5, Number(opts.teamSize) | 0));
+    saveConfig(lab, config); hub.reload();
+    const court = [...hub.courts.values()].find(c => c.def.name === name); if (court) hub.broadcastCourt(court);
+    return { court: def, published: !!court };
+  };
+  // Ajuste fino pelas setas do painel: row 0 = time 1, 1 = time 2, 'both' = os dois.
+  // du: ao longo da lateral (+ = rumo à cesta 2), dv: + = para dentro da quadra. ds: espaço entre spots.
+  hub.nudge = ({ court: name, row, du, dv, ds }) => {
+    const config = loadConfig(lab), def = config.courts.find(c => c.name === name);
+    if (!def) throw new Error('Quadra não encontrada: ' + name);
+    const rows = row === 'both' ? [0, 1] : [Number(row) === 1 ? 1 : 0];
+    def.offsets = Array.isArray(def.offsets) ? def.offsets : [[0, 0], [0, 0]];
+    for (const r of rows) {
+      const o = def.offsets[r] = Array.isArray(def.offsets[r]) ? def.offsets[r] : [0, 0];
+      o[0] = Math.round((Number(o[0]) || 0) + (Number(du) || 0)); o[1] = Math.round((Number(o[1]) || 0) + (Number(dv) || 0));
+    }
+    if (Number(ds)) def.spacing = Math.max(10, Math.min(300, (Number(def.spacing) || 45) + Number(ds)));
     saveConfig(lab, config); hub.reload();
     const court = [...hub.courts.values()].find(c => c.def.name === name); if (court) hub.broadcastCourt(court);
     return { court: def, published: !!court };
