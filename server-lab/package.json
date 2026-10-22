@@ -5,7 +5,8 @@
   "description": "Experimental local NBA 2K22 protocol laboratory",
   "scripts": {
     "start": "node server.cjs --experimental-login",
-    "test": "node attribute-prices-test.cjs && node item-prices-test.cjs && node native-websocket-key-test.cjs && node public-smoke-test.cjs"
+    "test": "node attribute-prices-test.cjs && node item-prices-test.cjs && node native-websocket-key-test.cjs && node public-smoke-test.cjs && node park-courts-test.cjs && node vconline-relay-test.cjs && node park-socket-test.cjs",
+    "friend": "node friend-proxy.cjs"
   },
   "engines": {
     "node": ">=20"

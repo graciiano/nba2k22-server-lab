@@ -44,7 +44,7 @@ function createLab(options={}) {
     const requestUrl=new URL(req.url,'https://localhost');const route=requestUrl.pathname;
     if(req.method==='GET' && route==='/health') {
       res.writeHead(200,{'Content-Type':'application/json'});
-      res.end(JSON.stringify({status:'laboratory',experimentalLogin:experiment,parkImplemented:false,sessions:sessions.size})); return;
+      res.end(JSON.stringify({status:'laboratory',experimentalLogin:experiment,parkCourts:fs.existsSync(path.join(__dirname,'park-courts.enabled')),sessions:sessions.size})); return;
     }
     const chunks=[]; let size=0;
     try { for await(const chunk of req) {size+=chunk.length;if(size>1024*1024){res.writeHead(413);res.end();return;}chunks.push(chunk);} }
@@ -143,7 +143,9 @@ if(require.main===module) {
   const tls=tlsConfig?{pfx:fs.readFileSync(path.join(__dirname,'localhost.pfx')),passphrase:tlsConfig.passphrase}:undefined;
   const server=createLab({tls,experimentalLogin:process.argv.includes('--experimental-login')});
   const port=Number(process.env.PORT || 21022);
-  server.listen(port,'127.0.0.1',()=>console.log(`${tls?'https':'http'}://127.0.0.1:${port} — ${process.argv.includes('--experimental-login')?'experimental session replies':'capture mode'}`));
+  // LISTEN_HOST=0.0.0.0 lets friends reach this server through friend-proxy.cjs (VPN/LAN).
+  const host=process.env.LISTEN_HOST||'127.0.0.1';
+  server.listen(port,host,()=>console.log(`${tls?'https':'http'}://${host}:${port} — ${process.argv.includes('--experimental-login')?'experimental session replies':'capture mode'}`));
   const worldFile=path.join(__dirname,'world-route.json');
   const worldRoute=require('./world-connect.cjs').validateCaptureUrl(fs.existsSync(worldFile)?JSON.parse(fs.readFileSync(worldFile,'utf8')).url:require('./world-connect.cjs').defaultCaptureUrl);
   if(!worldRoute.secure){
@@ -153,10 +155,16 @@ if(require.main===module) {
     const entryResponder=entryEnabled?require('./world-entry-probe.cjs').createEntryResponder(__dirname):null;
     const travelEnabled=fs.existsSync(path.join(__dirname,'mycourt-travel.enabled'));
     const worldServer=require('./world-capture-transport.cjs').createWorldCaptureTransport(path.join(__dirname,'captures'),entryEnabled?{replyBuilder:entryResponder,replyMode:'experimental-world-entry-'+entryMode,mycourtBootstrap:fs.existsSync(path.join(__dirname,'mycourt-bootstrap.enabled')),travelReplyBuilder:travelEnabled?require('./mycourt-travel.cjs').createMyCourtTravel(__dirname,entryResponder.matchId):null}:{});
-    worldServer.listen(worldRoute.port,'127.0.0.1',()=>console.log('Loopback world socket capture listening on '+worldRoute.port));
+    worldServer.listen(worldRoute.port,host,()=>console.log(`World socket listening on ${host}:${worldRoute.port} — painel: http://127.0.0.1:${worldRoute.port}/park`));
     server.on('close',()=>worldServer.close());
     if(entryMode==='single-player-bootstrap'){
-      const relay=require('./udp-relay-capture.cjs').startRelayCapture(worldRoute.port,path.join(__dirname,'captures'));
+      let relay;
+      if(fs.existsSync(path.join(__dirname,'park-relay.enabled'))){
+        // VCONLINE-compatible UDP relay for world sessions and lockstep court games.
+        relay=require('./vconline-relay.cjs').startRelay({port:worldRoute.port,host,log:require('./park-capture.cjs').parkLogger(__dirname)});
+        if(fs.existsSync(path.join(__dirname,'park-courts.enabled')))require('./park-courts.cjs').sharedHub(__dirname,require('./park-capture.cjs').parkLogger(__dirname)).relay=relay;
+        console.log(`UDP relay listening on ${host}:${worldRoute.port}`);
+      }else relay=require('./udp-relay-capture.cjs').startRelayCapture(worldRoute.port,path.join(__dirname,'captures'));
       server.on('close',()=>relay.close());
     }
   }

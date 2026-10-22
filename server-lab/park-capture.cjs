@@ -28,10 +28,17 @@ function attachParkCapture(server,captureDir,options={}) {
  wss.on('connection',(ws,req)=>{
   let entryReplySent=false,travelReplySent=false;
   const gameplay=fs.existsSync(path.join(path.dirname(captureDir),'mycourt-gameplay.enabled'))?require('./mycourt-gameplay.cjs').createMyCourtGameplay():null;
+  // Park courts / presence: one shared hub for every world socket of this process.
+  const lab=path.dirname(captureDir);
+  const park=fs.existsSync(path.join(lab,'park-courts.enabled'))?require('./park-courts.cjs').sharedHub(lab,parkLogger(lab)).attach(frame=>{if(ws.readyState===1)ws.send(frame);},req.socket.remoteAddress):null;
+  const captureAll=process.env.CAPTURE_ALL==='1'||!park;
+  ws.on('close',()=>{if(park)park.close();});
   ws.on('error',()=>{});
   ws.on('message',(data,isBinary)=>{
    const bytes=Buffer.from(data);const id=Date.now()+'-ws-'+crypto.randomBytes(4).toString('hex');
    let decoded,error;try{decoded=decodeEnvelope(bytes);}catch(e){error=e.message;}
+   // Movement (0xCE1C9E8C) arrives many times per second; with the Park hub it is not written to disk.
+   if(!captureAll&&decoded&&decoded.packetId==='0xCE1C9E8C'){try{park.handle(bytes);}catch(e){}return;}
    fs.writeFileSync(path.join(captureDir,id+'.bin'),bytes);
    // Preserve connection identifier only in raw capture; omit from summary.
    const summary={route:new URL(req.url,'https://localhost').pathname,isBinary,bytes:bytes.length,error,envelope:decoded?{length:decoded.length,packetId:decoded.packetId,bodyLength:decoded.bodyLength}:null};
@@ -44,14 +51,20 @@ function attachParkCapture(server,captureDir,options={}) {
    if(isBinary&&decoded&&!entryReplySent&&options.replyBuilder){
     try{
      const reply=options.replyBuilder(bytes);
-     if(reply){entryReplySent=true;if(gameplay)gameplay.bind(bytes,reply);ws.send(reply);const responseDir=path.join(path.dirname(captureDir),'responses');fs.mkdirSync(responseDir,{recursive:true});fs.writeFileSync(path.join(responseDir,id+'-ws.bin'),reply);fs.writeFileSync(path.join(responseDir,id+'-ws.json'),JSON.stringify({mode:options.replyMode||'experimental-world-entry-route-probe',bytes:reply.length,packetId:'0x9D32C5B4'},null,2));}
+     if(reply){entryReplySent=true;if(gameplay)gameplay.bind(bytes,reply);ws.send(reply);if(park)try{park.bindEntry(bytes,reply);}catch(e){parkLogger(lab)({event:'park-bind-error',reason:e.message});}const responseDir=path.join(path.dirname(captureDir),'responses');fs.mkdirSync(responseDir,{recursive:true});fs.writeFileSync(path.join(responseDir,id+'-ws.bin'),reply);fs.writeFileSync(path.join(responseDir,id+'-ws.json'),JSON.stringify({mode:options.replyMode||'experimental-world-entry-route-probe',bytes:reply.length,packetId:'0x9D32C5B4'},null,2));}
      if(reply&&options.mycourtBootstrap){const room=require('./mycourt-bootstrap.cjs').buildMyCourtBootstrap(bytes,reply);if(room){ws.send(room);const dir=path.join(path.dirname(captureDir),'responses');fs.writeFileSync(path.join(dir,id+'-mycourt.bin'),room);fs.writeFileSync(path.join(dir,id+'-mycourt.json'),JSON.stringify({mode:'experimental-mycourt-minimal-object',bytes:room.length,packetId:'0x9C72247C',classCrc:'0x16A0D01E',fields:[0,1,2],customizationsImplemented:false},null,2));}}
     }catch(e){fs.writeFileSync(path.join(captureDir,id+'-reply-error.json'),JSON.stringify({event:'entry-reply-error',reason:e.message},null,2));}
    }
+   if(isBinary&&decoded&&park){try{const result=park.handle(bytes);if(result)parkLogger(lab)({capture:id,...result});}catch(e){parkLogger(lab)({capture:id,event:'park-error',reason:e.message});}}
    if(isBinary&&decoded&&gameplay){try{const result=gameplay.handle(bytes);if(result){const {frames,...metadata}=result;metadata.responses=(frames||[]).map(frame=>({bytes:frame.length,packetId:'0x9C72247C',classCrc:'0x'+frame.readUInt32BE(24).toString(16)}));const dir=path.join(path.dirname(captureDir),'responses');fs.mkdirSync(dir,{recursive:true});for(const [index,frame] of (frames||[]).entries()){ws.send(frame);fs.writeFileSync(path.join(dir,id+'-gameplay-'+index+'.bin'),frame);}fs.writeFileSync(path.join(dir,id+'-gameplay.json'),JSON.stringify(metadata,null,2));}}catch(e){fs.writeFileSync(path.join(captureDir,id+'-gameplay-error.json'),JSON.stringify({event:'mycourt-gameplay-error',reason:e.message}));}}
   });
  });
  server.on('close',()=>{for(const client of wss.clients)client.terminate();wss.close();});
  return wss;
 }
-module.exports={decodeEnvelope,attachParkCapture};
+function parkLogger(lab){
+ return entry=>{const line=JSON.stringify({at:new Date().toISOString(),...entry},(k,v)=>typeof v==='bigint'?v.toString():v);
+  try{fs.appendFileSync(path.join(lab,'park-events.log'),line+'\n');}catch{}
+  if(entry&&entry.event&&!/^relay-data/.test(entry.event))console.log('[park]',line);};
+}
+module.exports={decodeEnvelope,attachParkCapture,parkLogger};

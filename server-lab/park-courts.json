@@ -1,0 +1,10 @@
+{
+  "presence": true,
+  "soloStart": true,
+  "requestAck": true,
+  "echoPlayerOnHandshake": true,
+  "soloDelayMs": 1500,
+  "readyTimeoutMs": 10000,
+  "relay": { "address": "127.0.0.1", "port": 21023 },
+  "courts": []
+}
