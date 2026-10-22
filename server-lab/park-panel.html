@@ -29,7 +29,7 @@ code{font-size:13px}ol{margin:0;padding-left:20px}li{margin:3px 0}
 <section>
 <h2>Como calibrar uma quadra</h2>
 <ol>
-<li>A quadra tem parede (igual ao oficial) — não precisa entrar. Pare em cima de onde ficava o <b>1º spot</b> do time da casa → <b>Casa 1º spot</b>; depois em cima do <b>último spot</b> → <b>Casa último</b>.</li>
+<li>A quadra e a faixa azul têm parede (igual ao oficial). Encoste na faixa, na altura do <b>1º spot</b> do time da casa → <b>Casa 1º spot</b>; na altura do <b>último spot</b> → <b>Casa último</b>. Os tapetes vão para dentro da faixa pelo <b>recuo</b>; você aperta X do lado de fora e o jogo te leva até o tapete.</li>
 <li>Repita na fileira do outro time: <b>Visitante 1º spot</b> e <b>Visitante último</b>. Os spots são distribuídos entre as duas pontas.</li>
 <li>Opcional: <b>Centro</b> e <b>Cesta</b> refinam a posição e a orientação, se der para chegar perto.</li>
 <li>Os tapetes aparecem nesses pontos. Pise neles para pedir “Got Next”.</li>
@@ -41,6 +41,7 @@ code{font-size:13px}ol{margin:0;padding-left:20px}li{margin:3px 0}
 <label>Quadra<input id="court" value="A" maxlength="24"></label>
 <label>Jogadores por time<select id="team"><option>1</option><option>2</option><option selected>3</option></select></label>
 <label>CourtType (opcional)<input id="ctype" placeholder="padrão" inputmode="numeric"></label>
+<label>Recuo dos tapetes para dentro da faixa (cm)<input id="inset" value="150" inputmode="numeric"></label>
 <div>
 <button class="primary" data-p="center">Centro</button>
 <button class="primary" data-p="basket">Cesta</button>
@@ -48,6 +49,7 @@ code{font-size:13px}ol{margin:0;padding-left:20px}li{margin:3px 0}
 <button class="primary" data-p="homeEnd">Casa último</button>
 <button class="primary" data-p="away">Visitante 1º spot</button>
 <button class="primary" data-p="awayEnd">Visitante último</button>
+<button id="applyInset">Aplicar recuo</button>
 <button id="reload">Republicar quadras</button>
 </div>
 <div id="msg"></div>
@@ -70,9 +72,11 @@ async function post(path){const r=await fetch(path,{method:'POST'});const j=awai
 document.querySelectorAll('button[data-p]').forEach(b=>b.onclick=async()=>{
   const q=new URLSearchParams({court:$('court').value.trim(),point:b.dataset.p,teamSize:$('team').value});
   if($('ctype').value.trim())q.set('courtType',$('ctype').value.trim());
+  if($('inset').value.trim())q.set('inset',$('inset').value.trim());
   try{const j=await post('/park/mark?'+q);$('msg').textContent=`Ponto “${b.textContent}” salvo para ${j.court.name}`+(j.published?' — quadra publicada.':' — falta Casa ou Visitante.');}catch(e){$('msg').textContent=e.message;}
   refresh();
 });
+$('applyInset').onclick=async()=>{try{const q=new URLSearchParams({court:$('court').value.trim(),inset:$('inset').value.trim()});const j=await post('/park/inset?'+q);$('msg').textContent=`Recuo ${j.court.inset} cm aplicado em ${j.court.name}.`;}catch(e){$('msg').textContent=e.message;}};
 $('reload').onclick=async()=>{try{const j=await post('/park/reload');$('msg').textContent=`${j.courts} quadra(s) republicada(s).`;}catch(e){$('msg').textContent=e.message;}};
 async function act(path){try{await post(path);}catch(e){$('msg').textContent=e.message;}refresh();}
 async function refresh(){

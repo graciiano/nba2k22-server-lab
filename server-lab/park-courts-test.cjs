@@ -53,6 +53,10 @@ const u8 = b => b[0], u32 = b => b.readUInt32LE(0), u64 = b => b.readBigUInt64LE
   const g3 = geometry({ name: 'R', teamSize: 3, home: [1000, 0, -300], homeEnd: [1000, 0, 300], away: [-1000, 0, -300], awayEnd: [-1000, 0, 300] });
   assert.deepEqual(g3.queues[0].first, [1000, 0, -300]); assert.deepEqual(g3.queues[0].step.map(Math.round), [0, 0, 300]);
   assert.equal(g3.queues[0].facing, -16384); assert.equal(g3.queues[1].facing, 16384);
+  // Recuo: tapete 200 cm para dentro (rumo à quadra), área de detecção começa 150 cm para fora da marca.
+  const g4 = geometry({ name: 'I', teamSize: 3, inset: 200, home: [1000, 0, -300], homeEnd: [1000, 0, 300], away: [-1000, 0, -300], awayEnd: [-1000, 0, 300] });
+  assert.deepEqual(g4.queues[0].first.map(Math.round), [800, 0, -300]);
+  const xs = g4.queues[0].corners.map(c => Math.round(c[0])); assert.equal(Math.max(...xs), 1150); assert.equal(Math.min(...xs), 700);
   assert.deepEqual(g2.pos, [0, 0, 0]); assert.equal(g2.queues[0].facing, 16384); assert.equal(g2.queues[1].facing, -16384);
 
   // ---- 1v1 lockstep game between two clients ----

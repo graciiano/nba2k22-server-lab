@@ -19,6 +19,7 @@ function createWorldCaptureTransport(captureDir,options={}){
    if(req.method!=='POST'){json(405,{error:'Use POST'});return;}
    const q=Object.fromEntries(url.searchParams);
    if(url.pathname==='/park/mark'){json(200,hub.mark(q));return;}
+   if(url.pathname==='/park/inset'){json(200,hub.setInset(q.court,q.inset));return;}
    if(url.pathname==='/park/remove'){json(200,{courts:hub.removeCourt(q.court)});return;}
    if(url.pathname==='/park/reload'){const n=hub.reload();for(const p of hub.parkPeers())if(p.body)hub.publishCourts(p);json(200,{courts:n});return;}
    if(url.pathname==='/park/end'){const c=[...hub.courts.values()].find(c=>c.def.name===q.court);if(c)hub.endGame(c,'panel');json(200,{ended:!!c});return;}

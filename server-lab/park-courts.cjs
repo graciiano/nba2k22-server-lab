@@ -73,9 +73,15 @@ function geometry(def) {
       side = [toCourt[2], 0, -toCourt[0]];
       first = sub(mark, mul(side, STEP * (n - 1) / 2));
     }
-    const exit = sub(first, mul(toCourt, EXIT));
+    // inset: a faixa dos tapetes fica atrás da colisão da quadra. O jogador pára do lado de fora
+    // (onde marcou), aperta X e o comportamento GoGetNext o leva até o tapete. Por isso a área de
+    // detecção começa no corredor (-150) e vai até o tapete; o tapete fica "inset" cm para dentro.
+    const inset = Number.isFinite(Number(def.inset)) ? Number(def.inset) : 0;
+    const mark0 = first;
+    first = add(first, mul(toCourt, inset));
+    const exit = sub(mark0, mul(toCourt, EXIT));
     const length = spacing * (n - 1) + 60;
-    const corners = [[-60, -100], [-60, 100], [length, 100], [length, -100]].map(([a, b]) => add(add(first, mul(side, a)), mul(toCourt, b)));
+    const corners = [[-60, -150], [-60, inset + 100], [length, inset + 100], [length, -150]].map(([a, b]) => add(add(mark0, mul(side, a)), mul(toCourt, b)));
     return { first, step: mul(side, spacing), exit, facing: facingUnits(toCourt), corners, count: n };
   });
   const yaw = Math.atan2(forward[0], forward[2]);
@@ -276,7 +282,7 @@ function createHub(lab, log = () => {}) {
   };
 
   // ---------- calibration ----------
-  hub.mark = ({ court: name, point, teamSize, courtType, puid }) => {
+  hub.mark = ({ court: name, point, teamSize, courtType, inset, puid }) => {
     if (!/^[A-Za-z0-9_-]{1,24}$/.test(String(name || ''))) throw new Error('Nome de quadra inválido (use letras/números, até 24)');
     if (!['center', 'basket', 'home', 'homeEnd', 'away', 'awayEnd'].includes(point)) throw new Error('Ponto deve ser center, basket, home, homeEnd, away ou awayEnd');
     const source = puid ? hub.byPuid(puid) : hub.lastMover;
@@ -287,9 +293,18 @@ function createHub(lab, log = () => {}) {
     def[point] = [source.position.x, source.position.y, source.position.z];
     if (teamSize) def.teamSize = Math.max(1, Math.min(5, Number(teamSize) | 0));
     if (courtType !== undefined && courtType !== '') def.courtType = Number(courtType) >>> 0;
+    if (inset !== undefined && inset !== '' && Number.isFinite(Number(inset))) def.inset = Math.max(-500, Math.min(800, Number(inset)));
     saveConfig(lab, config); hub.reload();
     const court = [...hub.courts.values()].find(c => c.def.name === name);
     if (court) hub.broadcastCourt(court);
+    return { court: def, published: !!court };
+  };
+  hub.setInset = (name, inset) => {
+    const value = Number(inset); if (!Number.isFinite(value)) throw new Error('Recuo inválido');
+    const config = loadConfig(lab), def = config.courts.find(c => c.name === name);
+    if (!def) throw new Error('Quadra não encontrada: ' + name);
+    def.inset = Math.max(-500, Math.min(800, value)); saveConfig(lab, config); hub.reload();
+    const court = [...hub.courts.values()].find(c => c.def.name === name); if (court) hub.broadcastCourt(court);
     return { court: def, published: !!court };
   };
   hub.removeCourt = name => {
@@ -299,7 +314,7 @@ function createHub(lab, log = () => {}) {
   hub.status = () => ({
     config: { presence: hub.config.presence, soloStart: hub.config.soloStart, relay: hub.config.relay },
     players: [...hub.peers.values()].filter(p => !p.closed).map(p => ({ peer: p.id, inPark: p.inPark, handshake: !!p.body, userdata: !!p.userdata, state: p.state ? '0x' + p.state.toString(16) : null, position: p.position, puidHash: p.puid ? crypto.createHash('sha256').update(String(p.puid)).digest('hex').slice(0, 8) : null })),
-    courts: [...hub.courts.values()].map(c => ({ name: c.def.name, id: '0x' + c.id.toString(16), teamSize: c.g.n, courtType: c.def.courtType ?? COURT_TYPE_BY_TEAM[c.g.n], center: c.g.pos.map(v => Math.round(v)), centerMarked: isPoint(c.def.center), hasBasket: !!c.def.basket, home: c.queues[0].filter(Boolean).length, away: c.queues[1].filter(Boolean).length, playing: !!c.game, objectState: c.game ? c.game.objectState : 0 })),
+    courts: [...hub.courts.values()].map(c => ({ name: c.def.name, id: '0x' + c.id.toString(16), teamSize: c.g.n, courtType: c.def.courtType ?? COURT_TYPE_BY_TEAM[c.g.n], inset: c.def.inset ?? 0, center: c.g.pos.map(v => Math.round(v)), centerMarked: isPoint(c.def.center), hasBasket: !!c.def.basket, home: c.queues[0].filter(Boolean).length, away: c.queues[1].filter(Boolean).length, playing: !!c.game, objectState: c.game ? c.game.objectState : 0 })),
   });
 
   hub.attach = (send, label) => createPeer(hub, send, label);
