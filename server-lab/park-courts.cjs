@@ -21,7 +21,7 @@ const S = require('./park-schema.cjs');
 const codec = require(process.env.REFERENCE_OPAL_CODEC || require('./reference-codecs.cjs').opalPath());
 
 const DEFAULT_CONFIG = {
-  presence: true, soloStart: true, requestAck: true, echoPlayerOnHandshake: true, soloDelayMs: 1500, readyTimeoutMs: 10000,
+  presence: true, soloStart: false, requestAck: true, echoPlayerOnHandshake: true, soloDelayMs: 1500, readyTimeoutMs: 10000,
   relay: { address: '127.0.0.1', port: 21023 }, courts: [],
 };
 const COURT_TYPE_BY_TEAM = { 1: 6, 2: 5, 3: 4 }; // 2K19 reference values; override per court.

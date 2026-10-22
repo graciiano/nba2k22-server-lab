@@ -97,6 +97,25 @@ static LONG CALLBACK onException(PEXCEPTION_POINTERS e) {
   }
   return EXCEPTION_CONTINUE_SEARCH;
 }
+// Assert interno (RVA 0x1E51AD0): (expressão, canal, subcanal, função, arquivo, linha, formato, args).
+static const uintptr_t RVA_ASSERT = 0x1e51ad0;
+using AssertFn = int(__fastcall*)(const char*, const char*, const char*, const char*, const char*, int, const wchar_t*, void*);
+static AssertFn assertOriginal;
+static int __fastcall assertHook(const char* expr, const char* ch, const char* sub, const char* func, const char* file, int line, const wchar_t* fmt, void* args) {
+  DWORD err = GetLastError();
+  EnterCriticalSection(&lock);
+  if (out) {
+    fprintf(out, "%llu ASSERT c=%llx [%s/%s] %s:%d expr=%s msg=", (unsigned long long)GetTickCount64(), (unsigned long long)((uintptr_t)__builtin_return_address(0) - base),
+      readable(ch, 1) ? ch : "?", readable(sub, 1) ? sub : "?", readable(func, 1) ? func : "?", line, readable(expr, 1) ? expr : "?");
+    if (readable(fmt, 2)) putWide(fmt, 300);
+    if (readable(args, 8)) { unsigned count = ((unsigned*)args)[1]; if (count > 8) count = 8; void** pairs = (void**)((char*)args + 8);
+      for (unsigned i = 0; i < count && readable(pairs + 2 * i, 16); i++) putArg(pairs[2 * i], pairs[2 * i + 1]); }
+    fputc('\n', out); fflush(out);
+  }
+  LeaveCriticalSection(&lock);
+  SetLastError(err);
+  return assertOriginal(expr, ch, sub, func, file, line, fmt, args);
+}
 static DWORD WINAPI flusher(LPVOID) {
   for (;;) {
     Sleep(1000);
@@ -116,6 +135,8 @@ static DWORD start() {
   if (MH_Initialize() != MH_OK) return 4;
   if (MH_CreateHook((void*)(base + RVA_LOGGER), (void*)hook, (void**)&original) != MH_OK) return 5;
   if (MH_EnableHook((void*)(base + RVA_LOGGER)) != MH_OK) return 6;
+  { const unsigned char ae[] = {0x4c,0x8b,0xdc,0x49,0x89,0x5b,0x08,0x49,0x89,0x6b,0x10};
+    if (!memcmp((void*)(base + RVA_ASSERT), ae, sizeof(ae)) && MH_CreateHook((void*)(base + RVA_ASSERT), (void*)assertHook, (void**)&assertOriginal) == MH_OK) MH_EnableHook((void*)(base + RVA_ASSERT)); }
   *(volatile DWORD*)(base + RVA_FLAG) = 1;
   AddVectoredExceptionHandler(1, onException);
   HANDLE t = CreateThread(nullptr, 0, flusher, nullptr, 0, nullptr); if (t) CloseHandle(t);
