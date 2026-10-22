@@ -60,6 +60,13 @@ const u8 = b => b[0], u32 = b => b.readUInt32LE(0), u64 = b => b.readBigUInt64LE
   // Um clique por lado: fileira perpendicular ao olhar, tapete recuado na direção do olhar.
   const g5 = geometry({ name: 'F', teamSize: 3, inset: 100, home: [0, 0, 0], homeFacing: [1, 0, 0], away: [1000, 0, 0], awayFacing: [-1, 0, 0] });
   assert.deepEqual(g5.queues[0].first.map(Math.round), [100, 0, 120]); assert.equal(g5.queues[0].facing, 16384); assert.equal(g5.queues[1].facing, -16384);
+  // Layout da 2K: atrás das cestas + lateral → 3 spots em cada lateral perto da cesta 1, olhando para dentro.
+  const g6 = geometry({ name: 'K', teamSize: 3, endA: [0, 0, -1400], endB: [0, 0, 1400], lateral: [800, 0, 0] });
+  assert.deepEqual(g6.pos, [0, 0, 0]); assert.equal(Math.round(g6.halfW), 800);
+  assert.deepEqual(g6.queues[0].first.map(Math.round), [700, 0, -890]); assert.equal(g6.queues[0].facing, -16384);
+  assert.deepEqual(g6.queues[1].first.map(Math.round), [-700, 0, -890]); assert.equal(g6.queues[1].facing, 16384);
+  const g7 = geometry({ name: 'K', teamSize: 3, endA: [0, 0, -1400], endB: [0, 0, 1400], lateral: [800, 0, 0], sameEnd: false });
+  assert.deepEqual(g7.queues[1].first.map(Math.round), [-700, 0, 650]);
   assert.deepEqual(g2.pos, [0, 0, 0]); assert.equal(g2.queues[0].facing, 16384); assert.equal(g2.queues[1].facing, -16384);
 
   // ---- 1v1 lockstep game between two clients ----

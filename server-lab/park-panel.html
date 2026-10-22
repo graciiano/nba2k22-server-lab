@@ -27,31 +27,32 @@ code{font-size:13px}ol{margin:0;padding-left:20px}li{margin:3px 0}
 <p class="sub">Calibração e estado das quadras Got Next do servidor local NBA 2K22.</p>
 
 <section>
-<h2>Como calibrar uma quadra</h2>
+<h2>Como marcar uma quadra (layout da 2K)</h2>
+<p>Igual ao oficial: <b>3 spots numa lateral e 3 na outra, perto da cesta</b>, dentro da faixa azul. Você só marca 3 pontos do lado de fora da quadra:</p>
 <ol>
-<li>Antes: ande uns segundos em linha reta pelo Park (o servidor aprende para onde o boneco olha — veja “Direção” abaixo).</li>
-<li>Pare encostado na faixa azul, <b>no meio</b> de onde ficavam os spots do time da casa, <b>olhando para a quadra</b> → <b>Casa</b>.</li>
-<li>Faça o mesmo do lado do outro time → <b>Visitante</b>. Os tapetes aparecem na sua frente, dentro da faixa (ajuste com <b>Recuo</b>).</li>
-<li>Opcional: “fim da fileira” marca o último spot, se preferir definir a fileira por duas pontas.</li>
-<li>Opcional: <b>Centro</b> e <b>Cesta</b> refinam a posição e a orientação, se der para chegar perto.</li>
-<li>Os tapetes aparecem nesses pontos. Pise neles para pedir “Got Next”.</li>
+<li>Pare no corredor <b>atrás da cesta 1</b>, alinhado com o meio da cesta → <b>Atrás da cesta 1</b>.</li>
+<li>Pare atrás da <b>cesta 2</b> (outra ponta da mesma quadra), alinhado → <b>Atrás da cesta 2</b>.</li>
+<li>Encoste na <b>faixa azul de uma lateral</b> (qualquer ponto dela) → <b>Lateral</b>. O outro lado é espelhado.</li>
 </ol>
+<p class="muted">Os 6 tapetes aparecem na hora. Se ficarem fora do lugar, ajuste abaixo e clique <b>Aplicar ajustes</b> (não precisa marcar de novo).</p>
 </section>
 
 <section>
-<h2>Marcar ponto</h2>
+<h2>Marcar</h2>
 <label>Quadra<input id="court" value="A" maxlength="24"></label>
 <label>Jogadores por time<select id="team"><option>1</option><option>2</option><option selected>3</option></select></label>
-<label>CourtType (opcional)<input id="ctype" placeholder="padrão" inputmode="numeric"></label>
-<label>Recuo dos tapetes para dentro da faixa (cm)<input id="inset" value="150" inputmode="numeric"></label>
 <div>
-<button class="primary" data-p="center">Centro</button>
-<button class="primary" data-p="basket">Cesta</button>
-<button class="primary" data-p="home">Casa</button>
-<button class="primary" data-p="away">Visitante</button>
-<button data-p="homeEnd">Casa: fim da fileira</button>
-<button data-p="awayEnd">Visitante: fim da fileira</button>
-<button id="applyInset">Aplicar recuo</button>
+<button class="primary" data-p="endA">Atrás da cesta 1</button>
+<button class="primary" data-p="endB">Atrás da cesta 2</button>
+<button class="primary" data-p="lateral">Lateral</button>
+</div>
+<h2>Ajustes</h2>
+<label>Recuo para dentro da faixa (cm)<input id="inset" value="100" inputmode="numeric"></label>
+<label>Distância do meio da quadra até os spots (0 = meio, 1 = fundo)<input id="along" value="0.55" inputmode="decimal"></label>
+<label><input type="checkbox" id="sameEnd" checked> Os dois times perto da mesma cesta (desmarque = cestas opostas)</label>
+<label>CourtType (opcional)<input id="ctype" placeholder="padrão" inputmode="numeric"></label>
+<div>
+<button id="applyInset">Aplicar ajustes</button>
 <button id="reload">Republicar quadras</button>
 </div>
 <div id="msg"></div>
@@ -76,10 +77,10 @@ document.querySelectorAll('button[data-p]').forEach(b=>b.onclick=async()=>{
   const q=new URLSearchParams({court:$('court').value.trim(),point:b.dataset.p,teamSize:$('team').value});
   if($('ctype').value.trim())q.set('courtType',$('ctype').value.trim());
   if($('inset').value.trim())q.set('inset',$('inset').value.trim());
-  try{const j=await post('/park/mark?'+q);$('msg').textContent=`Ponto “${b.textContent}” salvo para ${j.court.name}`+(j.published?' — quadra publicada.':' — falta Casa ou Visitante.');}catch(e){$('msg').textContent=e.message;}
+  try{const j=await post('/park/mark?'+q);$('msg').textContent=`Ponto “${b.textContent}” salvo para ${j.court.name}`+(j.published?' — quadra publicada.':' — falta marcar a outra cesta.');}catch(e){$('msg').textContent=e.message;}
   refresh();
 });
-$('applyInset').onclick=async()=>{try{const q=new URLSearchParams({court:$('court').value.trim(),inset:$('inset').value.trim()});const j=await post('/park/inset?'+q);$('msg').textContent=`Recuo ${j.court.inset} cm aplicado em ${j.court.name}.`;}catch(e){$('msg').textContent=e.message;}};
+$('applyInset').onclick=async()=>{try{const q=new URLSearchParams({court:$('court').value.trim(),inset:$('inset').value.trim(),along:$('along').value.trim(),sameEnd:$('sameEnd').checked?'1':'0',teamSize:$('team').value});const j=await post('/park/inset?'+q);$('msg').textContent=`Ajustes aplicados em ${j.court.name}.`;}catch(e){$('msg').textContent=e.message;}};
 $('reload').onclick=async()=>{try{const j=await post('/park/reload');$('msg').textContent=`${j.courts} quadra(s) republicada(s).`;}catch(e){$('msg').textContent=e.message;}};
 async function act(path){try{await post(path);}catch(e){$('msg').textContent=e.message;}refresh();}
 async function refresh(){

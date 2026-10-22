@@ -43,11 +43,41 @@ const courtKey = id => (0x5041524bn << 32n) | BigInt(id >>> 0); // 'PARK' << 32 
 // que ficam do lado de fora, onde ficavam os tapetes de Got Next.
 const isPoint = v => Array.isArray(v) && v.length === 3 && v.every(Number.isFinite);
 function centerOf(def) {
+  if (isPoint(def.endA) && isPoint(def.endB)) return mul(add(def.endA, def.endB), 0.5);
   if (isPoint(def.center)) return def.center.map(Number);
   if (isPoint(def.home) && isPoint(def.away)) return mul(add(def.home, def.away), 0.5);
   return null;
 }
+// Layout como a 2K: a quadra é definida por fora — atrás de cada cesta (endA/endB) e um ponto
+// encostado numa lateral. Spots: 3 numa lateral e 3 na outra, perto da cesta, dentro da faixa
+// (recuo), olhando para a quadra; a área do X começa no corredor.
+function courtLayout(def) {
+  const n = Math.max(1, Math.min(5, def.teamSize | 0 || 3));
+  const a = def.endA.map(Number), b = def.endB.map(Number), pos = mul(add(a, b), 0.5);
+  const forward = flatUnit(sub(b, a)), right = [forward[2], 0, -forward[0]];
+  const halfLen = Math.hypot(b[0] - a[0], b[2] - a[2]) / 2;
+  const lat = isPoint(def.lateral) ? sub(def.lateral, pos) : null;
+  const latDot = lat ? lat[0] * right[0] + lat[2] * right[2] : 0;
+  const halfW = lat ? Math.abs(latDot) : Number(def.halfWidth) || 900;
+  const sideA = latDot < 0 ? -1 : 1;
+  const inset = Number.isFinite(Number(def.inset)) ? Number(def.inset) : 100;
+  const along = Number.isFinite(Number(def.along)) ? Number(def.along) : 0.55;
+  const sameEnd = def.sameEnd !== false;
+  const rows = [[sideA, -1], [-sideA, sameEnd ? -1 : 1]];
+  const queues = rows.map(([side, end]) => {
+    const toCourt = mul(right, -side);                       // de fora da lateral para dentro
+    const middle = add(add(pos, mul(forward, end * halfLen * along)), mul(right, side * (halfW - inset)));
+    const first = sub(middle, mul(forward, STEP * (n - 1) / 2));
+    const walk = add(first, mul(toCourt, -(inset + 150)));   // corredor, onde o jogador aperta X
+    const length = STEP * (n - 1) + 60;
+    const corners = [[-60, 0], [-60, inset + 250], [length, inset + 250], [length, 0]].map(([u, v]) => add(add(walk, mul(forward, u)), mul(toCourt, v)));
+    return { first, step: mul(forward, STEP), exit: add(first, mul(toCourt, -(inset + EXIT))), facing: facingUnits(toCourt), corners, count: n };
+  });
+  return { n, pos, yaw: Math.atan2(forward[0], forward[2]), queues, forward, right, halfLen, halfW };
+}
+
 function geometry(def) {
+  if (isPoint(def.endA) && isPoint(def.endB)) return courtLayout(def);
   const center = centerOf(def);
   if (!center) throw new Error(`Court ${def.name} has no center (marque Centro, ou Casa e Visitante)`);
   const n = Math.max(1, Math.min(5, def.teamSize | 0 || 3));
@@ -332,7 +362,7 @@ function createHub(lab, log = () => {}) {
   // ---------- calibration ----------
   hub.mark = ({ court: name, point, teamSize, courtType, inset, puid }) => {
     if (!/^[A-Za-z0-9_-]{1,24}$/.test(String(name || ''))) throw new Error('Nome de quadra inválido (use letras/números, até 24)');
-    if (!['center', 'basket', 'home', 'homeEnd', 'away', 'awayEnd'].includes(point)) throw new Error('Ponto deve ser center, basket, home, homeEnd, away ou awayEnd');
+    if (!['endA', 'endB', 'lateral', 'center', 'basket', 'home', 'homeEnd', 'away', 'awayEnd'].includes(point)) throw new Error('Ponto inválido');
     const source = puid ? hub.byPuid(puid) : hub.lastMover;
     if (!source || !source.position) throw new Error('Nenhuma posição de jogador recebida ainda — ande um pouco no Park');
     const config = loadConfig(lab);
@@ -352,11 +382,14 @@ function createHub(lab, log = () => {}) {
     if (court) hub.broadcastCourt(court);
     return { court: def, published: !!court };
   };
-  hub.setInset = (name, inset) => {
-    const value = Number(inset); if (!Number.isFinite(value)) throw new Error('Recuo inválido');
+  hub.setInset = (name, inset, opts = {}) => {
     const config = loadConfig(lab), def = config.courts.find(c => c.name === name);
     if (!def) throw new Error('Quadra não encontrada: ' + name);
-    def.inset = Math.max(-500, Math.min(800, value)); saveConfig(lab, config); hub.reload();
+    if (inset !== undefined && inset !== '') { const value = Number(inset); if (!Number.isFinite(value)) throw new Error('Recuo inválido'); def.inset = Math.max(-500, Math.min(800, value)); }
+    if (opts.along !== undefined && opts.along !== '') { const v = Number(opts.along); if (Number.isFinite(v)) def.along = Math.max(0, Math.min(1, v)); }
+    if (opts.sameEnd !== undefined && opts.sameEnd !== '') def.sameEnd = opts.sameEnd === true || opts.sameEnd === '1' || opts.sameEnd === 'true';
+    if (opts.teamSize) def.teamSize = Math.max(1, Math.min(5, Number(opts.teamSize) | 0));
+    saveConfig(lab, config); hub.reload();
     const court = [...hub.courts.values()].find(c => c.def.name === name); if (court) hub.broadcastCourt(court);
     return { court: def, published: !!court };
   };
