@@ -44,6 +44,13 @@ const courtsOf = got => got.filter(f => f.readUInt32BE(4) === S.PACKET.ObjectDat
     // Entry reply connection bytes are reused on every server frame.
     assert.ok(a.got.slice(1).every(f => f.subarray(8, 16).equals(a.got[0].subarray(8, 16))));
     const move = Buffer.alloc(30); move.writeUInt32LE(30, 0); move.writeUInt32BE(S.PACKET.Movement, 4); move.writeInt16BE(321, 16); move.writeInt16BE(5, 18); move.writeInt16BE(-654, 20); a.ws.send(move); await wait(50);
+    // Atualização do próprio PLAYER: servidor confirma (REQUEST_ACK) e devolve o objeto na mesma versão.
+    const upd = Buffer.alloc(42 + 20); upd.writeUInt32LE(upd.length, 0); upd.writeUInt32BE(S.PACKET.ClientUpdate, 4); upd.writeUInt32BE(0x5f000001, 8); upd.writeBigUInt64BE(7n, 16);
+    upd.writeBigUInt64BE(a.puid, 24); upd.writeUInt32BE(S.CLASS.Player, 32); upd.writeUInt16BE(20, 40); upd.writeBigUInt64BE(a.puid, 42); upd.writeBigUInt64BE(9n, 50);
+    const before = a.got.length; a.ws.send(upd); await wait(50);
+    const after = a.got.slice(before);
+    assert.ok(after.some(f => f.length >= 24 && f.readUInt32BE(4) === S.PACKET.RequestAck && f.readUInt32BE(20) === 7), 'player update acked');
+    assert.ok(after.some(f => f.length >= 48 && f.readUInt32BE(4) === S.PACKET.ObjectData && f.readUInt32BE(24) === S.CLASS.Player && f.readBigUInt64BE(40) === 9n), 'player update echoed at client version');
     const status = JSON.parse((await httpCall('GET', '/park/status')).body);
     assert.deepEqual([status.players[0].position.x, status.players[0].position.z], [321, -654]);
     const mark = await httpCall('POST', '/park/mark?court=Z&point=center&teamSize=2'); assert.equal(mark.status, 200, mark.body);

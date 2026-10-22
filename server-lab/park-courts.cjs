@@ -57,14 +57,26 @@ function geometry(def) {
   const forward = isPoint(def.basket) ? flatUnit(sub(def.basket, pos)) : across ? [-across[2], 0, across[0]] : [0, 0, 1];
   const right = [forward[2], 0, -forward[0]];
   const marks = [def.home || add(pos, mul(right, -842)), def.away || add(pos, mul(right, 842))];
+  const ends = [def.homeEnd, def.awayEnd];
   const queues = marks.map((mark, index) => {
-    const toCourt = flatUnit(sub(pos, mark), index ? mul(right, -1) : right);
-    const side = [toCourt[2], 0, -toCourt[0]];
-    const first = sub(mark, mul(side, STEP * (n - 1) / 2));
+    let first, side, toCourt, spacing = STEP;
+    if (isPoint(ends[index]) && Math.hypot(ends[index][0] - mark[0], ends[index][2] - mark[2]) > 30) {
+      // Fileira marcada pelas duas pontas (1º e último spot): spots distribuídos entre elas.
+      side = flatUnit(sub(ends[index], mark));
+      spacing = n > 1 ? Math.hypot(ends[index][0] - mark[0], ends[index][2] - mark[2]) / (n - 1) : STEP;
+      first = mark.map(Number);
+      const middle = add(first, mul(side, spacing * (n - 1) / 2));
+      const perp = [-side[2], 0, side[0]], away = sub(pos, middle);
+      toCourt = Math.hypot(away[0], away[2]) > 50 && perp[0] * away[0] + perp[2] * away[2] < 0 ? mul(perp, -1) : perp;
+    } else {
+      toCourt = flatUnit(sub(pos, mark), index ? mul(right, -1) : right);
+      side = [toCourt[2], 0, -toCourt[0]];
+      first = sub(mark, mul(side, STEP * (n - 1) / 2));
+    }
     const exit = sub(first, mul(toCourt, EXIT));
-    const length = STEP * (n - 1) + 60;
+    const length = spacing * (n - 1) + 60;
     const corners = [[-60, -100], [-60, 100], [length, 100], [length, -100]].map(([a, b]) => add(add(first, mul(side, a)), mul(toCourt, b)));
-    return { first, step: mul(side, STEP), exit, facing: facingUnits(toCourt), corners, count: n };
+    return { first, step: mul(side, spacing), exit, facing: facingUnits(toCourt), corners, count: n };
   });
   const yaw = Math.atan2(forward[0], forward[2]);
   return { n, pos, yaw, queues, forward, right };
@@ -266,7 +278,7 @@ function createHub(lab, log = () => {}) {
   // ---------- calibration ----------
   hub.mark = ({ court: name, point, teamSize, courtType, puid }) => {
     if (!/^[A-Za-z0-9_-]{1,24}$/.test(String(name || ''))) throw new Error('Nome de quadra inválido (use letras/números, até 24)');
-    if (!['center', 'basket', 'home', 'away'].includes(point)) throw new Error('Ponto deve ser center, basket, home ou away');
+    if (!['center', 'basket', 'home', 'homeEnd', 'away', 'awayEnd'].includes(point)) throw new Error('Ponto deve ser center, basket, home, homeEnd, away ou awayEnd');
     const source = puid ? hub.byPuid(puid) : hub.lastMover;
     if (!source || !source.position) throw new Error('Nenhuma posição de jogador recebida ainda — ande um pouco no Park');
     const config = loadConfig(lab);
@@ -394,10 +406,17 @@ function createPeer(hub, send, label) {
     if (id === S.PACKET.PlayerHandshake && bytes.length >= 90 && bytes.readUInt32BE(32) === S.CLASS.Player) return handshake(bytes);
     if (id === S.PACKET.CompressedCommand) return compressed(bytes);
     if (id === S.PACKET.Request && bytes.length >= 52) return request(bytes);
-    if (id === S.PACKET.ClientUpdate && hub.config.presence && peer.puid && bytes.length > 42 && bytes.readUInt32BE(32) === S.CLASS.Player && bytes.readBigUInt64BE(24) === peer.puid) {
+    if (id === S.PACKET.ClientUpdate && peer.puid && bytes.length > 58 && bytes.readUInt32BE(32) === S.CLASS.Player && bytes.readBigUInt64BE(24) === peer.puid) {
+      // Atualização do próprio PLAYER (request id em +16, payload = key,versão,bitmap,valores em +42).
+      // O cliente deixa o pedido pendente até o servidor confirmar (REQUEST_ACK) E o objeto do servidor
+      // chegar nessa versão (TK_WORLD::SERVER::UpdatePendingRequests 0x1742DC8). Enquanto há pedido
+      // pendente, PARK_PLAYERMANAGER::UpdateParkState não roda — por isso o PLAYING não iniciava o jogo.
       const length = bytes.readUInt16BE(40); if (42 + length !== bytes.length) return null;
-      const payload = bytes.subarray(42);
-      for (const other of hub.parkPeers()) if (other !== peer && other.body) other.send(S.wrapObject(peer.puid, S.CLASS.Player, payload, other.connection));
+      const payload = bytes.subarray(42), version = payload.readBigUInt64BE(8);
+      ack(bytes);
+      if (version > peer.version) { peer.version = version; if (peer.body) peer.body.writeBigUInt64BE(version, 8); }
+      peer.send(S.wrapObject(peer.puid, S.CLASS.Player, payload, peer.connection));
+      if (hub.config.presence) for (const other of hub.parkPeers()) if (other !== peer && other.body) other.send(S.wrapObject(peer.puid, S.CLASS.Player, payload, other.connection));
       return null;
     }
     return null;

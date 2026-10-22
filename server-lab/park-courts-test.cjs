@@ -49,6 +49,10 @@ const u8 = b => b[0], u32 = b => b.readUInt32LE(0), u64 = b => b.readBigUInt64LE
   assert.equal(g.queues[0].facing, 16384); assert.equal(g.queues[1].facing, -16384);
   // Sem centro (a quadra tem parede): centro = meio entre Casa e Visitante, mesma orientação.
   const g2 = geometry({ name: 'H', teamSize: 2, home: [-850, 0, 0], away: [850, 0, 0] });
+  // Fileiras marcadas pelas pontas: espaçamento e orientação vêm dos pontos.
+  const g3 = geometry({ name: 'R', teamSize: 3, home: [1000, 0, -300], homeEnd: [1000, 0, 300], away: [-1000, 0, -300], awayEnd: [-1000, 0, 300] });
+  assert.deepEqual(g3.queues[0].first, [1000, 0, -300]); assert.deepEqual(g3.queues[0].step.map(Math.round), [0, 0, 300]);
+  assert.equal(g3.queues[0].facing, -16384); assert.equal(g3.queues[1].facing, 16384);
   assert.deepEqual(g2.pos, [0, 0, 0]); assert.equal(g2.queues[0].facing, 16384); assert.equal(g2.queues[1].facing, -16384);
 
   // ---- 1v1 lockstep game between two clients ----
