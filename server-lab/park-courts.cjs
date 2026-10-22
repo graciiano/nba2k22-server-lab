@@ -60,18 +60,22 @@ function courtLayout(def) {
   const latDot = lat ? lat[0] * right[0] + lat[2] * right[2] : 0;
   const halfW = lat ? Math.abs(latDot) : Number(def.halfWidth) || 900;
   const sideA = latDot < 0 ? -1 : 1;
-  const inset = Number.isFinite(Number(def.inset)) ? Number(def.inset) : 100;
-  const along = Number.isFinite(Number(def.along)) ? Number(def.along) : 0.55;
-  const sameEnd = def.sameEnd !== false;
-  const rows = [[sideA, -1], [-sideA, sameEnd ? -1 : 1]];
+  // Unidades do mundo do 2K22 não são cm (a quadra medida tem ~880 de fundo a fundo), então os padrões
+  // abaixo foram tirados das telas do jogo e ficam ajustáveis no painel.
+  const num = (v, d) => Number.isFinite(Number(v)) && v !== null && v !== '' ? Number(v) : d;
+  const inset = num(def.inset, 30), along = num(def.along, 0.75), spacing = num(def.spacing, 45);
+  // Padrão (confirmado no jogo oficial): os dois times na MESMA lateral, cada fileira perto de uma
+  // cesta, na faixa azul. sameSide=false espelha o time 2 para a lateral oposta.
+  const sameSide = def.sameSide !== false;
+  const rows = [[sideA, -1], [sameSide ? sideA : -sideA, 1]];
   const queues = rows.map(([side, end]) => {
     const toCourt = mul(right, -side);                       // de fora da lateral para dentro
     const middle = add(add(pos, mul(forward, end * halfLen * along)), mul(right, side * (halfW - inset)));
-    const first = sub(middle, mul(forward, STEP * (n - 1) / 2));
-    const walk = add(first, mul(toCourt, -(inset + 150)));   // corredor, onde o jogador aperta X
-    const length = STEP * (n - 1) + 60;
-    const corners = [[-60, 0], [-60, inset + 250], [length, inset + 250], [length, 0]].map(([u, v]) => add(add(walk, mul(forward, u)), mul(toCourt, v)));
-    return { first, step: mul(forward, STEP), exit: add(first, mul(toCourt, -(inset + EXIT))), facing: facingUnits(toCourt), corners, count: n };
+    const first = sub(middle, mul(forward, spacing * (n - 1) / 2));
+    const walk = add(first, mul(toCourt, -(inset + 60)));    // corredor, onde o jogador aperta X
+    const length = spacing * (n - 1) + 40;
+    const corners = [[-40, 0], [-40, inset + 100], [length, inset + 100], [length, 0]].map(([u, v]) => add(add(walk, mul(forward, u)), mul(toCourt, v)));
+    return { first, step: mul(forward, spacing), exit: add(first, mul(toCourt, -(inset + 80))), facing: facingUnits(toCourt), corners, count: n };
   });
   return { n, pos, yaw: Math.atan2(forward[0], forward[2]), queues, forward, right, halfLen, halfW };
 }
@@ -387,7 +391,8 @@ function createHub(lab, log = () => {}) {
     if (!def) throw new Error('Quadra não encontrada: ' + name);
     if (inset !== undefined && inset !== '') { const value = Number(inset); if (!Number.isFinite(value)) throw new Error('Recuo inválido'); def.inset = Math.max(-500, Math.min(800, value)); }
     if (opts.along !== undefined && opts.along !== '') { const v = Number(opts.along); if (Number.isFinite(v)) def.along = Math.max(0, Math.min(1, v)); }
-    if (opts.sameEnd !== undefined && opts.sameEnd !== '') def.sameEnd = opts.sameEnd === true || opts.sameEnd === '1' || opts.sameEnd === 'true';
+    if (opts.spacing !== undefined && opts.spacing !== '') { const v = Number(opts.spacing); if (Number.isFinite(v)) def.spacing = Math.max(10, Math.min(300, v)); }
+    if (opts.sameSide !== undefined && opts.sameSide !== '') def.sameSide = opts.sameSide === true || opts.sameSide === '1' || opts.sameSide === 'true';
     if (opts.teamSize) def.teamSize = Math.max(1, Math.min(5, Number(opts.teamSize) | 0));
     saveConfig(lab, config); hub.reload();
     const court = [...hub.courts.values()].find(c => c.def.name === name); if (court) hub.broadcastCourt(court);

@@ -28,11 +28,11 @@ code{font-size:13px}ol{margin:0;padding-left:20px}li{margin:3px 0}
 
 <section>
 <h2>Como marcar uma quadra (layout da 2K)</h2>
-<p>Igual ao oficial: <b>3 spots numa lateral e 3 na outra, perto da cesta</b>, dentro da faixa azul. Você só marca 3 pontos do lado de fora da quadra:</p>
+<p>Igual ao oficial: os 6 spots na faixa azul de <b>uma lateral</b> — 3 perto de uma cesta (time 1) e 3 perto da outra (time 2). Você só marca 3 pontos do lado de fora da quadra:</p>
 <ol>
 <li>Pare no corredor <b>atrás da cesta 1</b>, alinhado com o meio da cesta → <b>Atrás da cesta 1</b>.</li>
 <li>Pare atrás da <b>cesta 2</b> (outra ponta da mesma quadra), alinhado → <b>Atrás da cesta 2</b>.</li>
-<li>Encoste na <b>faixa azul de uma lateral</b> (qualquer ponto dela) → <b>Lateral</b>. O outro lado é espelhado.</li>
+<li>Encoste na <b>faixa azul da lateral onde ficam os spots</b> (qualquer ponto dela) → <b>Lateral</b>.</li>
 </ol>
 <p class="muted">Os 6 tapetes aparecem na hora. Se ficarem fora do lugar, ajuste abaixo e clique <b>Aplicar ajustes</b> (não precisa marcar de novo).</p>
 </section>
@@ -47,9 +47,10 @@ code{font-size:13px}ol{margin:0;padding-left:20px}li{margin:3px 0}
 <button class="primary" data-p="lateral">Lateral</button>
 </div>
 <h2>Ajustes</h2>
-<label>Recuo para dentro da faixa (cm)<input id="inset" value="100" inputmode="numeric"></label>
-<label>Distância do meio da quadra até os spots (0 = meio, 1 = fundo)<input id="along" value="0.55" inputmode="decimal"></label>
-<label><input type="checkbox" id="sameEnd" checked> Os dois times perto da mesma cesta (desmarque = cestas opostas)</label>
+<label>Recuo para dentro da faixa (unidades do jogo; maior = mais para dentro)<input id="inset" value="30" inputmode="numeric"></label>
+<label>Espaço entre os spots<input id="spacing" value="45" inputmode="numeric"></label>
+<label>Distância do meio da quadra até os spots (0 = meio, 1 = fundo)<input id="along" value="0.75" inputmode="decimal"></label>
+<label><input type="checkbox" id="sameSide" checked> Os dois times na mesma lateral (desmarque = time 2 na lateral oposta)</label>
 <label>CourtType (opcional)<input id="ctype" placeholder="padrão" inputmode="numeric"></label>
 <div>
 <button id="applyInset">Aplicar ajustes</button>
@@ -80,7 +81,7 @@ document.querySelectorAll('button[data-p]').forEach(b=>b.onclick=async()=>{
   try{const j=await post('/park/mark?'+q);$('msg').textContent=`Ponto “${b.textContent}” salvo para ${j.court.name}`+(j.published?' — quadra publicada.':' — falta marcar a outra cesta.');}catch(e){$('msg').textContent=e.message;}
   refresh();
 });
-$('applyInset').onclick=async()=>{try{const q=new URLSearchParams({court:$('court').value.trim(),inset:$('inset').value.trim(),along:$('along').value.trim(),sameEnd:$('sameEnd').checked?'1':'0',teamSize:$('team').value});const j=await post('/park/inset?'+q);$('msg').textContent=`Ajustes aplicados em ${j.court.name}.`;}catch(e){$('msg').textContent=e.message;}};
+$('applyInset').onclick=async()=>{try{const q=new URLSearchParams({court:$('court').value.trim(),inset:$('inset').value.trim(),along:$('along').value.trim(),spacing:$('spacing').value.trim(),sameSide:$('sameSide').checked?'1':'0',teamSize:$('team').value});const j=await post('/park/inset?'+q);$('msg').textContent=`Ajustes aplicados em ${j.court.name}.`;}catch(e){$('msg').textContent=e.message;}};
 $('reload').onclick=async()=>{try{const j=await post('/park/reload');$('msg').textContent=`${j.courts} quadra(s) republicada(s).`;}catch(e){$('msg').textContent=e.message;}};
 async function act(path){try{await post(path);}catch(e){$('msg').textContent=e.message;}refresh();}
 async function refresh(){
