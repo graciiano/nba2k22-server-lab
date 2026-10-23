@@ -35,7 +35,7 @@ function client(hub, n) {
   return { peer, puid, sent, handshake: () => peer.handle(hs), move, req, userdata };
 }
 const courts = sent => sent.filter(f => f.readUInt32BE(4) === S.PACKET.ObjectData && f.readUInt32BE(24) === S.CLASS.Court).map(S.decodeCourtFrame);
-const players = sent => sent.filter(f => f.readUInt32BE(4) === S.PACKET.ObjectData && f.readUInt32BE(24) === S.CLASS.Player).map(f => ({ key: f.readBigUInt64BE(16), state: f.readUInt32LE(32 + 69), court: f.readUInt32LE(32 + 73) }));
+const players = sent => sent.filter(f => f.readUInt32BE(4) === S.PACKET.ObjectData && f.readUInt32BE(24) === S.CLASS.Player && f.length >= 32 + 77).map(f => ({ key: f.readBigUInt64BE(16), state: f.readUInt32LE(32 + 69), court: f.readUInt32LE(32 + 73) }));
 const u8 = b => b[0], u32 = b => b.readUInt32LE(0), u64 = b => b.readBigUInt64LE(0);
 
 (async () => {
@@ -90,6 +90,9 @@ const u8 = b => b[0], u32 = b => b.readUInt32LE(0), u64 = b => b.readBigUInt64LE
   const key = court0.key;
   a.sent.length = 0;
   const j1 = a.req(key, [[S.CRC.COMMAND, S.CRC.JOIN], [S.CRC.AREA, 0]]);
+  // Destino do Got Next: atualização parcial do PLAYER só com ServerDestination(156)+Facing(157).
+  const dest = a.sent.filter(f => f.readUInt32BE(4) === S.PACKET.ObjectData && f.readUInt32BE(24) === S.CLASS.Player && f.length === 32 + 57).at(-1);
+  assert.ok(dest, 'destination update sent'); assert.equal(dest[32 + 16 + 19], 0x0c); assert.equal(dest.readFloatLE(32 + 37 + 12), 1);
   assert.equal(j1.event, 'park-join'); assert.equal(j1.queue, 0);
   const pa = players(a.sent).find(p => p.key === a.puid);
   assert.equal(pa.state, S.STATE.GOT_NEXT); assert.equal(pa.court, courtId('A'));

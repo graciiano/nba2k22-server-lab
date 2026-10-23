@@ -246,6 +246,27 @@ function createHub(lab, log = () => {}) {
     peer.state = state; hub.publishPlayer(peer); return true;
   };
 
+  // Destino do Got Next: o cliente leva o jogador até PLAYER.ServerDestination (vec4) virado para
+  // ServerDestinationFacing (i32). Sem isso ele anda para (0,0,0). Índices de campo do PLAYER 2K22
+  // (impressora 0x1416B9350, corpo completo com 165 campos/bitmap de 21 bytes): State 4, CourtName 5,
+  // ServerDestination 156, ServerDestinationFacing 157. Enviado como atualização parcial (só esses bits).
+  const PLAYER_BITS = 21 * 8, F_DEST = 156, F_FACING = 157;
+  hub.sendDestination = (peer, court, q, i) => {
+    if (!peer.body || hub.config.walkToSpot === false) return false;
+    const queue = court.g.queues[q]; if (!queue) return false;
+    const spot = add(queue.first, mul(queue.step, i));
+    const bitmap = Buffer.alloc(PLAYER_BITS / 8);
+    for (const bit of [F_DEST, F_FACING]) bitmap[bit >> 3] |= 0x80 >> (bit & 7);
+    const values = Buffer.alloc(20);
+    values.writeFloatLE(spot[0], 0); values.writeFloatLE(spot[1], 4); values.writeFloatLE(spot[2], 8); values.writeFloatLE(1, 12);
+    values.writeInt32LE(queue.facing | 0, 16);
+    peer.version += 1n; peer.body.writeBigUInt64BE(peer.version, 8);
+    const head = Buffer.alloc(16); head.writeBigUInt64BE(peer.puid, 0); head.writeBigUInt64BE(peer.version, 8);
+    peer.send(S.wrapObject(peer.puid, S.CLASS.Player, Buffer.concat([head, bitmap, values]), peer.connection));
+    peer.destination = spot;
+    return true;
+  };
+
   hub.seatOf = puid => { for (const court of hub.courts.values()) for (let q = 0; q < 2; q++) { const i = court.queues[q].indexOf(puid); if (i >= 0) return { court, q, i }; } return null; };
   hub.release = (puid, quiet) => {
     const seat = hub.seatOf(puid); if (!seat) return null;
@@ -265,6 +286,7 @@ function createHub(lab, log = () => {}) {
     court.queues[q][i] = peer.puid;
     if (previous && previous.court !== court) hub.broadcastCourt(previous.court);
     hub.setState(peer, S.STATE.GOT_NEXT, court);
+    hub.sendDestination(peer, court, q, i);
     hub.broadcastCourt(court);
     hub.maybeStart(court, peer);
     return { ok: true, queue: q, seat: i };
