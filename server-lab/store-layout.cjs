@@ -13,6 +13,8 @@
 const zlib=require('node:zlib');
 const {Builder}=require(process.env.REFERENCE_CODEC||require('./reference-codecs.cjs').granitePath());
 
+// Os itens são ligados pela tag "STORE_CATEGORY:<categoria>" (como no layout padrão embutido no exe para
+// WHEELZ/TATTOOS/BARBERSHOP/GATORADE). Categorias = enum 14240CF60 (246 nomes; os conhecidos estão abaixo).
 const STORES={
  NBASTORE:[['NBA_SHIRTS_ALL','Camisetas NBA'],['NBA_HOODIES_AND_OUTERWEAR','Moletons e casacos'],['NBA_PANTS_AND_SHORTS','Calças e shorts'],
   ['NBA_MITCHELL_NESS','Mitchell & Ness'],['NBA_OTHER_TEAM_HATS','Bonés de times'],['NBA_ACCESSORIES','Acessórios NBA'],
@@ -21,27 +23,28 @@ const STORES={
   ['SWAG_PANTS_AND_SHORTS','Calças e shorts'],['SWAG_HATS','Bonés e chapéus'],['SWAG_ACCESSORIES','Acessórios'],
   ['SWAG_JEWELRY','Joias'],['SWAG_GLASSES','Óculos'],['SWAG_EQUIPMENT','Equipamentos'],['SWAG_NIKE','Nike'],['SWAG_JORDAN','Jordan'],
   ['SWAG_ADIDAS','adidas'],['SWAG_UA','Under Armour'],['SWAG_PROAM','Pro-Am'],['SWAG_HOLIDAY','Festas'],['SWAG_MISC1','Coleção'],['SWAG_MISC2','Mais roupas']],
- FOOTLOCKER:[['SHOE_NBA','Tênis NBA'],['SHOE_MISC1','Coleção de tênis'],['SHOE_MISC2','Mais tênis']],
- NIKE_STORE:[['SWAG_NIKE','Nike'],['SHOE_NBA','Tênis']],
- JORDAN_STORE:[['SWAG_JORDAN','Jordan'],['SHOE_NBA','Tênis']],
- UNDERARMOUR_STORE:[['SWAG_UA','Under Armour'],['SHOE_NBA','Tênis']],
- CONVERSE_STORE:[['SHOE_MISC1','Converse'],['SWAG_MISC1','Roupas']],
- PUMA_STORE:[['SHOE_MISC1','Puma'],['SWAG_MISC1','Roupas']],
- NEW_BALANCE_STORE:[['SHOE_MISC2','New Balance'],['SWAG_MISC2','Roupas']],
- WHEELZ:[['WHEELZ','Wheelz']],
- TATTOOS:[['TATTOOS','Tatuagens']],
+ FOOTLOCKER:[['SHOE_NBA_NIKE','Nike'],['SHOE_NBA_NIKE_JORDAN','Jordan'],['SHOE_NBA_ADIDAS','adidas'],['SHOE_NBA_CONVERSE','Converse'],
+  ['SHOE_NBA_REEBOK','Reebok'],['SHOE_NBA','Tênis NBA'],['SHOE_MISC1','Coleção de tênis'],['SHOE_MISC2','Mais tênis']],
+ NIKE_STORE:[['SWAG_NIKE','Roupas Nike'],['SHOE_NBA_NIKE','Tênis Nike']],
+ JORDAN_STORE:[['SWAG_JORDAN','Roupas Jordan'],['SHOE_NBA_NIKE_JORDAN','Tênis Jordan']],
+ UNDERARMOUR_STORE:[['SWAG_UA','Under Armour']],
+ CONVERSE_STORE:[['SHOE_NBA_CONVERSE','Converse']],
+ PUMA_STORE:[['SHOE_MISC1','Tênis'],['SWAG_MISC1','Roupas']],
+ NEW_BALANCE_STORE:[['SHOE_MISC2','Tênis'],['SWAG_MISC2','Roupas']],
 };
-function cell(tag,title){return {cell_type:'CATEGORY',cell_size:'ONE_BY_ONE',flag:'NONE',title,description:'',logo_guid:'',tag};}
+function cell(category,title,store){return {cell_size:'ONE_BY_ONE',cell_type:'TAG',store_type:store,description:'',title,flag:'NONE',tag:'STORE_CATEGORY:'+category,logo_guid:''};}
 function layoutDocument(version=1){
  const doc={version};
  for(const [store,sections] of Object.entries(STORES)){
   const pages=[];
   for(let i=0;i<sections.length;i+=6){
-   const cells=sections.slice(i,i+6).map(([tag,title])=>cell(tag,title));
+   const cells=sections.slice(i,i+6).map(([tag,title])=>cell(tag,title,store));
    pages.push(cells.length>3?[cells.slice(0,3),cells.slice(3)]:[cells]);
   }
   doc[store]=pages;
  }
+ // WHEELZ, TATTOOS, BARBERSHOP e GATORADE: layout padrão que vem embutido no próprio exe.
+ Object.assign(doc,require('./store-layout-default.json'));
  return doc;
 }
 // version: o cliente só aceita layout com version maior que o que já tem em cache; usar algo crescente.
