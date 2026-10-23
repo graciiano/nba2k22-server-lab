@@ -18,4 +18,9 @@ function buildItemPrices(fields){
  });
  return out;
 }
-module.exports={buildItemPrices};
+function readPriceItems(fields){
+ const items=[];
+ for(let i=0;i<512;i++){const crc=Crc32(`ITEM_${i}`);if(!GetField(fields,crc))break;items.push(GetU32(fields,crc)>>>0);}
+ return items;
+}
+module.exports={buildItemPrices,readPriceItems};

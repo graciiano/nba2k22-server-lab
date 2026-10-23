@@ -53,7 +53,22 @@ function createItemInventory(directory){
   const raw=Buffer.from(JSON.stringify(rows)+'\0');
   return new c.Builder().AddU32(0xe3920695,0x504521a8).AddBinary(0x603bd442,zlib.deflateSync(raw)).AddU64(0x5ab6fdf4,BigInt(raw.length));
  }
- return {purchase,inventory};
+ // Política local "itens da loja liberados": todo item cujo preço o cliente consulta (catálogo que a loja
+ // exibe) vira item possuído da conta, sem compra. Itens comuns (sem atributos), válidos para todos os saves.
+ function grant(user,itemIds){
+  const ids=[...new Set(itemIds.filter(id=>Number.isInteger(id)&&id>0&&id<=0xffffffff))];
+  if(!ids.length)return 0;
+  const data=load(),key=owner(user),owned=data.accounts[key]||[];let added=0;
+  for(const id of ids){
+   if(owned.some(x=>x.item_id===id&&!x.custom))continue;
+   if(data.next>=Number.MAX_SAFE_INTEGER)throw Error('Inventory identifier exhausted');
+   owned.push({item_id:id,save:null,instance_id:data.next++,granted:true});added++;
+  }
+  if(!added)return 0;
+  data.accounts[key]=owned;fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(file+'.tmp',JSON.stringify(data));fs.renameSync(file+'.tmp',file);
+  return added;
+ }
+ return {purchase,inventory,grant};
 }
 module.exports={readItemPurchase,createItemInventory};
 

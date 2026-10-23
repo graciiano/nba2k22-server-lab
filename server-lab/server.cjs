@@ -93,6 +93,16 @@ function createLab(options={}) {
  }
  if(route==='/VirtualCurrency/get_prices'){
   try{reply=require('./item-prices.cjs').buildItemPrices(fields);}catch{res.writeHead(400);res.end('Invalid item price request');return;}
+  // progression-policy.json "ownAllShopItems": itens exibidos na loja passam a ser da conta (roupas,
+  // animações etc. liberadas sem compra). Registra também o catálogo visto em shop-catalog.json.
+  try{
+   const policyFile=path.join(__dirname,'progression-policy.json'),policy=fs.existsSync(policyFile)?JSON.parse(fs.readFileSync(policyFile,'utf8')):{};
+   const ids=require('./item-prices.cjs').readPriceItems(fields);
+   const catFile=path.join(__dirname,'shop-catalog.json'),cat=fs.existsSync(catFile)?JSON.parse(fs.readFileSync(catFile,'utf8')):[];
+   const merged=[...new Set([...cat,...ids])];if(merged.length!==cat.length){fs.writeFileSync(catFile+'.tmp',JSON.stringify(merged));fs.renameSync(catFile+'.tmp',catFile);}
+   const user=sessions.get(key.toString())?.userId;
+   if(policy.ownAllShopItems&&user&&user!=='0')itemInventory.grant(user,ids);
+  }catch(e){console.error('shop grant failed:',e.message);}
  }
  if(route==='/Text/validate'){
   try{reply=require('./name-validation.cjs').buildNameValidation(fields,parsed.Parsed.Data);}catch{res.writeHead(400);res.end('Invalid name validation request');return;}

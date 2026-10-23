@@ -3,5 +3,6 @@
   "attributePriceStep": 0,
   "respectBuildCaps": true,
   "shopItemsFree": true,
-  "animationsFree": true
+  "animationsFree": true,
+  "ownAllShopItems": true
 }
