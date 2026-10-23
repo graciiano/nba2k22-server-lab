@@ -24,7 +24,10 @@ const DEFAULT_CONFIG = {
   presence: true, speedOutsideGames: 0, soloStart: false, requestAck: true, echoPlayerOnHandshake: true, soloDelayMs: 1500, readyTimeoutMs: 10000,
   relay: { address: '127.0.0.1', port: 21023 }, courts: [],
 };
-const COURT_TYPE_BY_TEAM = { 1: 6, 2: 5, 3: 4 }; // 2K19 reference values; override per court.
+// CourtType do 2K22 (switch em 1416B0950, tabela 1416B1CA8 -> GameSettings): 9/10 = PARK_1_ON_1,
+// 8 = PARK_2_ON_2, 6 = PARK_3_ON_3, 5 = PARK_4_ON_4, 1 = PARK_5_ON_5 (11 = PARK_QUICK_1_ON_1).
+// Os valores antigos (2K19: 6/5/4) faziam o x1 virar 3v3 e o jogo fechava em AI_FillInGameDescription.
+const COURT_TYPE_BY_TEAM = { 1: 9, 2: 8, 3: 6, 4: 5, 5: 1 };
 const STEP = 120, EXIT = 160;
 
 // ---------- geometry ----------
@@ -360,9 +363,9 @@ function createHub(lab, log = () => {}) {
       const owner = players[0], body = Buffer.from(owner.body);
       body.writeBigUInt64BE(ghost.puid, 0); body.writeBigUInt64BE(1n, 8); body.writeBigUInt64LE(ghost.puid, 37);
       body.writeUInt32LE(S.STATE.PLAYING >>> 0, 69); body.writeUInt32LE(court.id, 73);
-      // MachineId próprio: com o mesmo MachineId do dono o jogo trata a cópia como 2º jogador LOCAL da mesma
-      // máquina, não cria o jogador controlado pela CPU e quebra em AI init (AV 0x975220, chamador 0x1979253).
-      if (hub.config.ghostOwnMachine !== false) { const m = body.readBigUInt64LE(45); body.writeBigUInt64LE((m ^ 0x00000000a5a50000n) || 2n, 45); }
+      // Opcional (ghostOwnMachine): MachineId diferente para a cópia. O crash do x1 era o CourtType errado
+      // (virava PARK_3_ON_3 com 1 jogador por time), não o MachineId; por padrão mantém o do dono.
+      if (hub.config.ghostOwnMachine === true) { const m = body.readBigUInt64LE(45); body.writeBigUInt64LE((m ^ 0x00000000a5a50000n) || 2n, 45); }
       ghost.body = body; owner.send(S.wrapObject(ghost.puid, S.CLASS.Player, body, owner.connection));
     }
     hub.broadcastCourt(court);
