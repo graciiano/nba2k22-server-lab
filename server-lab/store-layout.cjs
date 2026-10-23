@@ -20,7 +20,8 @@ const T=(tag,title)=>['LAB_'+tag,title];
 // Só a Swag's fica ativa (pedido do usuário): todas as categorias ficam nela; as outras lojas não recebem layout
 // nem itens, então não geram mais pedidos de catálogo.
 const STORES={
- SWAGS:[T('SWAG_TOPS','Camisetas'),T('SWAG_OUTERWEAR','Moletons e casacos'),T('SWAG_BOTTOMS','Calças e shorts'),
+ SWAGS:[T('SPECIAL_EVENTS','Itens especiais (eventos)'),T('SEASON_ITEMS','Itens de season'),T('SPECIAL_BOOSTS','Boosts (velocidade e atributos)'),
+  T('SWAG_TOPS','Camisetas'),T('SWAG_OUTERWEAR','Moletons e casacos'),T('SWAG_BOTTOMS','Calças e shorts'),
   T('SWAG_HATS','Bonés e chapéus'),T('SWAG_GLASSES','Óculos e máscaras'),T('SWAG_JEWELRY','Joias e relógios'),
   T('NBA_JERSEYS','Camisas de jogo NBA'),T('NBA_TOPS','Camisetas NBA'),T('NBA_OUTERWEAR','Moletons e casacos NBA'),
   T('NBA_BOTTOMS','Shorts e calças NBA'),T('NBA_HATS','Bonés NBA'),T('BRAND_NIKE','Roupas Nike'),
