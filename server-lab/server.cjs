@@ -7,7 +7,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const zlib = require('node:zlib');
 const codecPath = process.env.REFERENCE_CODEC || require('./reference-codecs.cjs').granitePath();
-const {Builder, TryParse, DateToVCDate, GetU64, GetU32, GetString8} = require(codecPath);
+const {Builder, TryParse, DateToVCDate, GetU64, GetU32, GetString8, GetField} = require(codecPath);
 const ID = {result:0xe3920695, success:0x504521a8, denied:0xc2141f44, key:0xda780e45, services:0xb5017d25, serverTime:0xe9824107, issuedAt:0x329a965f, environment:0x517c7ed8, sku:0xcff900a4, manifestTimestamp:0x93f13b2d};
 function createLab(options={}) {
   const worldConfig=path.join(__dirname,'world-route.json');
@@ -116,8 +116,10 @@ function createLab(options={}) {
  if(route==='/StoreV4/get_items'){
   const user=sessions.get(key.toString()).userId;
   if(!user||user==='0'){res.writeHead(409);res.end('Laboratory account identity unresolved');return;}
-  const shop=shopPolicyFor(user);
-  const out=require('./store-items.cjs').buildStoreItems(fields,{price:shop.free?0:null,ownedRows:itemInventory.ownedRows(user,fields)});
+  const shop=shopPolicyFor(user),storeItems=require('./store-items.cjs');
+  // Conta com loja grátis: tudo que a loja vende já entra como possuído (o jogo mostra como "seu" e deixa vestir).
+  if(shop.free){try{const page=storeItems.pageOf(GetField(fields,0x952ef509))||storeItems.pageFromBody(body);if(page)itemInventory.grant(user,storeItems.pageItemIds(page));}catch(e){console.error('store grant failed:',e.message);}}
+  const out=storeItems.buildStoreItems(fields,{price:shop.free?0:null,ownedRows:itemInventory.ownedRows(user,fields),body});
   console.log('store items',out.page||'(todas)','bytes',out.count,shop.free?'gratis':'preco normal');
   reply=out.builder;
  }
