@@ -92,6 +92,13 @@ const u8 = b => b[0], u32 = b => b.readUInt32LE(0), u64 = b => b.readBigUInt64LE
   a.move(120, 0, 210); assert.ok(b.sent.some(f => f.readUInt32BE(4) === S.PACKET.ObjectUpdateList && f.readBigUInt64BE(23) === a.puid), 'movement relayed');
   assert.equal(a.userdata().event, 'park-userdata-stored'); b.userdata();
 
+  { // giro da fileira: 90° troca a direção da fila de spots
+    const base = { name: 'R', teamSize: 3, endA: [0, 0, 0], endB: [0, 0, 880], lateral: [400, 0, 440] };
+    const g0 = geometry(base), g1 = geometry({ ...base, rotations: [90, 0] });
+    const d = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
+    assert.ok(Math.abs(g0.queues[0].step[0]) < 1e-6 && Math.abs(g1.queues[0].step[2]) < 1e-6, 'row 1 rotated 90°');
+    assert.ok(d(g0.queues[1].first, g1.queues[1].first) < 1e-6, 'row 2 untouched');
+  }
   const key = court0.key;
   a.sent.length = 0;
   const j1 = a.req(key, [[S.CRC.COMMAND, S.CRC.JOIN], [S.CRC.AREA, 0]]);
@@ -147,7 +154,7 @@ const u8 = b => b[0], u32 = b => b.readUInt32LE(0), u64 = b => b.readBigUInt64LE
   c.peer.close();
 
   // ---- solo start (single client, non-lockstep) ----
-  write({ presence: true, soloStart: true, soloDelayMs: 10, courts: [{ name: 'A', teamSize: 3, center: [0, 0, 0] }] });
+  write({ presence: true, soloStart: true, soloDelayMs: 10, courts: [{ name: 'A', teamSize: 1, center: [0, 0, 0] }] });
   const solo = createHub(lab, () => {}); const s = client(solo, 9); s.handshake();
   const skey = courts(s.sent)[0].key; s.req(skey, [[S.CRC.COMMAND, S.CRC.JOIN], [S.CRC.AREA, 0]]);
   await new Promise(r => setTimeout(r, 60));

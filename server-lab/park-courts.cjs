@@ -21,7 +21,7 @@ const S = require('./park-schema.cjs');
 const codec = require(process.env.REFERENCE_OPAL_CODEC || require('./reference-codecs.cjs').opalPath());
 
 const DEFAULT_CONFIG = {
-  presence: true, speedOutsideGames: 140, soloStart: false, requestAck: true, echoPlayerOnHandshake: true, soloDelayMs: 1500, readyTimeoutMs: 10000,
+  presence: true, speedOutsideGames: 0, soloStart: false, requestAck: true, echoPlayerOnHandshake: true, soloDelayMs: 1500, readyTimeoutMs: 10000,
   relay: { address: '127.0.0.1', port: 21023 }, courts: [],
 };
 const COURT_TYPE_BY_TEAM = { 1: 6, 2: 5, 3: 4 }; // 2K19 reference values; override per court.
@@ -69,15 +69,20 @@ function courtLayout(def) {
   const sameSide = def.sameSide !== false;
   const rows = [[sideA, -1], [sameSide ? sideA : -sideA, 1]];
   const offsets = Array.isArray(def.offsets) ? def.offsets : [];
+  const rotations = Array.isArray(def.rotations) ? def.rotations : [];
   const queues = rows.map(([side, end], index) => {
-    const toCourt = mul(right, -side);                       // de fora da lateral para dentro
+    const baseToCourt = mul(right, -side);                   // de fora da lateral para dentro
     const [du, dv] = Array.isArray(offsets[index]) ? offsets[index].map(Number) : [0, 0];   // ajuste fino do painel (setas)
-    const middle = add(add(add(pos, mul(forward, end * halfLen * along + (du || 0))), mul(right, side * (halfW - inset))), mul(toCourt, dv || 0));
-    const first = sub(middle, mul(forward, spacing * (n - 1) / 2));
+    const middle = add(add(add(pos, mul(forward, end * halfLen * along + (du || 0))), mul(right, side * (halfW - inset))), mul(baseToCourt, dv || 0));
+    // Giro da fileira (painel ⟲/⟳): roda a linha dos spots e o olhar em torno do meio da fileira.
+    const deg = Number(rotations[index]) || 0, rad = deg * Math.PI / 180;
+    const rot = v => [v[0] * Math.cos(rad) - v[2] * Math.sin(rad), v[1], v[0] * Math.sin(rad) + v[2] * Math.cos(rad)];
+    const along_ = rot(forward), toCourt = rot(baseToCourt);
+    const first = sub(middle, mul(along_, spacing * (n - 1) / 2));
     const walk = add(first, mul(toCourt, -(inset + 60)));    // corredor, onde o jogador aperta X
     const length = spacing * (n - 1) + 40;
-    const corners = [[-40, 0], [-40, inset + 100], [length, inset + 100], [length, 0]].map(([u, v]) => add(add(walk, mul(forward, u)), mul(toCourt, v)));
-    return { first, step: mul(forward, spacing), exit: add(first, mul(toCourt, -(inset + 80))), facing: facingUnits(toCourt), corners, count: n };
+    const corners = [[-40, 0], [-40, inset + 100], [length, inset + 100], [length, 0]].map(([u, v]) => add(add(walk, mul(along_, u)), mul(toCourt, v)));
+    return { first, step: mul(along_, spacing), exit: add(first, mul(toCourt, -(inset + 80))), facing: facingUnits(toCourt), corners, count: n, rotation: deg };
   });
   return { n, pos, yaw: Math.atan2(forward[0], forward[2]), queues, forward, right, halfLen, halfW };
 }
@@ -319,7 +324,8 @@ function createHub(lab, log = () => {}) {
     const home = court.queues[0].filter(Boolean), away = court.queues[1].filter(Boolean);
     const full = home.length === court.g.n && away.length === court.g.n;
     const others = hub.parkPeers().filter(p => p !== peer && p.body).length;
-    const solo = hub.config.soloStart && home.length + away.length === 1 && (others === 0 || hub.config.soloStart === 'always');
+    // x1 contra a CPU: só em quadra 1v1 (teamSize 1), a não ser que soloStart seja 'always'.
+    const solo = hub.config.soloStart && home.length + away.length === 1 && (court.g.n === 1 || hub.config.soloStart === 'always') && (others === 0 || hub.config.soloStart === 'always');
     if (!full && !solo) return false;
     const begin = () => {
       if (court.game) return;
@@ -354,6 +360,9 @@ function createHub(lab, log = () => {}) {
       const owner = players[0], body = Buffer.from(owner.body);
       body.writeBigUInt64BE(ghost.puid, 0); body.writeBigUInt64BE(1n, 8); body.writeBigUInt64LE(ghost.puid, 37);
       body.writeUInt32LE(S.STATE.PLAYING >>> 0, 69); body.writeUInt32LE(court.id, 73);
+      // MachineId próprio: com o mesmo MachineId do dono o jogo trata a cópia como 2º jogador LOCAL da mesma
+      // máquina, não cria o jogador controlado pela CPU e quebra em AI init (AV 0x975220, chamador 0x1979253).
+      if (hub.config.ghostOwnMachine !== false) { const m = body.readBigUInt64LE(45); body.writeBigUInt64LE((m ^ 0x00000000a5a50000n) || 2n, 45); }
       ghost.body = body; owner.send(S.wrapObject(ghost.puid, S.CLASS.Player, body, owner.connection));
     }
     hub.broadcastCourt(court);
@@ -446,7 +455,7 @@ function createHub(lab, log = () => {}) {
   };
   // Ajuste fino pelas setas do painel: row 0 = time 1, 1 = time 2, 'both' = os dois.
   // du: ao longo da lateral (+ = rumo à cesta 2), dv: + = para dentro da quadra. ds: espaço entre spots.
-  hub.nudge = ({ court: name, row, du, dv, ds }) => {
+  hub.nudge = ({ court: name, row, du, dv, ds, dr }) => {
     const config = loadConfig(lab), def = config.courts.find(c => c.name === name);
     if (!def) throw new Error('Quadra não encontrada: ' + name);
     const rows = row === 'both' ? [0, 1] : [Number(row) === 1 ? 1 : 0];
@@ -456,6 +465,10 @@ function createHub(lab, log = () => {}) {
       o[0] = Math.round((Number(o[0]) || 0) + (Number(du) || 0)); o[1] = Math.round((Number(o[1]) || 0) + (Number(dv) || 0));
     }
     if (Number(ds)) def.spacing = Math.max(10, Math.min(300, (Number(def.spacing) || 45) + Number(ds)));
+    if (Number(dr)) {
+      def.rotations = Array.isArray(def.rotations) ? def.rotations : [0, 0];
+      for (const r of rows) def.rotations[r] = (((Number(def.rotations[r]) || 0) + Number(dr)) % 360 + 540) % 360 - 180;
+    }
     saveConfig(lab, config); hub.reload();
     const court = [...hub.courts.values()].find(c => c.def.name === name); if (court) hub.broadcastCourt(court);
     return { court: def, published: !!court };

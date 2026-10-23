@@ -67,7 +67,8 @@ code{font-size:13px}ol{margin:0;padding-left:20px}li{margin:3px 0}
 <span></span><button data-n="0,-1" title="para fora da quadra">▼ para fora</button><span></span>
 </div>
 <div><button data-s="-1">Juntar spots</button> <button data-s="1">Separar spots</button></div>
-<p class="muted">Também funciona com as setas do teclado e as teclas − / + quando o painel estiver em foco. Os tapetes mudam no jogo na hora.</p>
+<div><button data-r="-1" title="girar a fileira no sentido anti-horário">⟲ Girar</button> <button data-r="1" title="girar a fileira no sentido horário">Girar ⟳</button> <span class="muted">(passo fino = 2°, médio = 5°, grande = 15°)</span></div>
+<p class="muted">Também funciona com as setas do teclado, as teclas − / + (espaço) e [ / ] (girar) quando o painel estiver em foco. Os tapetes mudam no jogo na hora.</p>
 </div>
 <div id="msg"></div>
 <div id="heading" class="muted"></div>
@@ -96,10 +97,11 @@ document.querySelectorAll('button[data-p]').forEach(b=>b.onclick=async()=>{
 });
 $('applyInset').onclick=async()=>{try{const q=new URLSearchParams({court:$('court').value.trim(),inset:$('inset').value.trim(),along:$('along').value.trim(),spacing:$('spacing').value.trim(),sameSide:$('sameSide').checked?'1':'0',teamSize:$('team').value});const j=await post('/park/inset?'+q);$('msg').textContent=`Ajustes aplicados em ${j.court.name}.`;}catch(e){$('msg').textContent=e.message;}};
 $('reload').onclick=async()=>{try{const j=await post('/park/reload');$('msg').textContent=`${j.courts} quadra(s) republicada(s).`;}catch(e){$('msg').textContent=e.message;}};
-async function nudge(du,dv,ds){const k=Number($('nstep').value);const q=new URLSearchParams({court:$('court').value.trim(),row:$('nrow').value,du:du*k,dv:dv*k,ds:(ds||0)*Math.max(2,k/2)});try{const j=await post('/park/nudge?'+q);const o=j.court.offsets||[];$('msg').textContent=`Time 1: ${JSON.stringify(o[0]||[0,0])}  Time 2: ${JSON.stringify(o[1]||[0,0])}  espaço: ${j.court.spacing||45}`;}catch(e){$('msg').textContent=e.message;}}
+async function nudge(du,dv,ds,dr){const k=Number($('nstep').value);const deg={3:2,10:5,30:15}[k]||5;const q=new URLSearchParams({court:$('court').value.trim(),row:$('nrow').value,du:du*k,dv:dv*k,ds:(ds||0)*Math.max(2,k/2),dr:(dr||0)*deg});try{const j=await post('/park/nudge?'+q);const o=j.court.offsets||[];const r=j.court.rotations||[0,0];$('msg').textContent=`Time 1: ${JSON.stringify(o[0]||[0,0])} giro ${r[0]||0}°  Time 2: ${JSON.stringify(o[1]||[0,0])} giro ${r[1]||0}°  espaço: ${j.court.spacing||45}`;}catch(e){$('msg').textContent=e.message;}}
 document.querySelectorAll('button[data-n]').forEach(b=>b.onclick=()=>{const [u,v]=b.dataset.n.split(',').map(Number);nudge(u,v,0);});
 document.querySelectorAll('button[data-s]').forEach(b=>b.onclick=()=>nudge(0,0,Number(b.dataset.s)));
-document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;const m={ArrowUp:[0,1],ArrowDown:[0,-1],ArrowLeft:[-1,0],ArrowRight:[1,0]}[e.key];if(m){e.preventDefault();nudge(m[0],m[1],0);}else if(e.key==='+'||e.key==='=')nudge(0,0,1);else if(e.key==='-')nudge(0,0,-1);});
+document.querySelectorAll('button[data-r]').forEach(b=>b.onclick=()=>nudge(0,0,0,Number(b.dataset.r)));
+document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;const m={ArrowUp:[0,1],ArrowDown:[0,-1],ArrowLeft:[-1,0],ArrowRight:[1,0]}[e.key];if(m){e.preventDefault();nudge(m[0],m[1],0);}else if(e.key==='+'||e.key==='=')nudge(0,0,1);else if(e.key==='-')nudge(0,0,-1);else if(e.key==='[')nudge(0,0,0,-1);else if(e.key===']')nudge(0,0,0,1);});
 async function act(path){try{await post(path);}catch(e){$('msg').textContent=e.message;}refresh();}
 async function refresh(){
   try{
