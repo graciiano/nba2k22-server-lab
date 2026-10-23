@@ -17,21 +17,17 @@ const {Builder}=require(process.env.REFERENCE_CODEC||require('./reference-codecs
 // serviço 0xCD58A443) traz tag_crcs = CRC32 dessas tags, e a célula com a mesma tag mostra esses itens.
 // As categorias LAB_* são nossas (geradas a partir da base de itens do jogo, store-items.json).
 const T=(tag,title)=>['LAB_'+tag,title];
+// Só a Swag's fica ativa (pedido do usuário): todas as categorias ficam nela; as outras lojas não recebem layout
+// nem itens, então não geram mais pedidos de catálogo.
 const STORES={
- NBASTORE:[T('NBA_JERSEYS','Camisas de jogo'),T('NBA_TOPS','Camisetas'),T('NBA_OUTERWEAR','Moletons e casacos'),
-  T('NBA_BOTTOMS','Calças e shorts'),T('NBA_HATS','Bonés')],
  SWAGS:[T('SWAG_TOPS','Camisetas'),T('SWAG_OUTERWEAR','Moletons e casacos'),T('SWAG_BOTTOMS','Calças e shorts'),
   T('SWAG_HATS','Bonés e chapéus'),T('SWAG_GLASSES','Óculos e máscaras'),T('SWAG_JEWELRY','Joias e relógios'),
+  T('NBA_JERSEYS','Camisas de jogo NBA'),T('NBA_TOPS','Camisetas NBA'),T('NBA_OUTERWEAR','Moletons e casacos NBA'),
+  T('NBA_BOTTOMS','Shorts e calças NBA'),T('NBA_HATS','Bonés NBA'),T('BRAND_NIKE','Roupas Nike'),
+  T('SHOES_NIKE','Tênis Nike'),T('SHOES_JORDAN','Tênis Jordan'),T('SHOES_ADIDAS','Tênis adidas'),
+  T('SHOES_UA','Tênis Under Armour'),T('SHOES','Todos os tênis'),T('BRAND_JORDAN','Roupas Jordan'),
   T('SWAG_SLEEVES','Mangas, faixas e fitas'),T('SWAG_COMPRESSION','Compressão'),T('SWAG_SOCKS','Meias'),
-  T('SWAG_BACKPACKS','Mochilas'),T('BRAND_NIKE','Nike'),T('BRAND_JORDAN','Jordan')],
- FOOTLOCKER:[T('SHOES','Todos os tênis'),T('SHOES_NIKE','Nike'),T('SHOES_JORDAN','Jordan'),T('SHOES_ADIDAS','adidas'),
-  T('SHOES_UA','Under Armour'),T('SHOES_CONVERSE','Converse'),T('SWAG_SOCKS','Meias')],
- NIKE_STORE:[T('SHOES_NIKE','Tênis Nike'),T('BRAND_NIKE','Roupas Nike')],
- JORDAN_STORE:[T('SHOES_JORDAN','Tênis Jordan'),T('BRAND_JORDAN','Roupas Jordan')],
- UNDERARMOUR_STORE:[T('SHOES_UA','Tênis Under Armour')],
- CONVERSE_STORE:[T('SHOES_CONVERSE','Tênis Converse')],
- PUMA_STORE:[T('SHOES_PUMA','Tênis Puma'),T('BRAND_PUMA','Roupas Puma')],
- NEW_BALANCE_STORE:[T('SHOES_NEW_BALANCE','Tênis New Balance')],
+  T('SWAG_BACKPACKS','Mochilas')],
 };
 function cell(category,title,store){return {cell_size:'ONE_BY_ONE',cell_type:'TAG',store_type:store,description:'',title,flag:'NONE',tag:'STORE_CATEGORY:'+category,logo_guid:''};}
 function layoutDocument(version=1){
@@ -44,8 +40,6 @@ function layoutDocument(version=1){
   }
   doc[store]=pages;
  }
- // WHEELZ, TATTOOS, BARBERSHOP e GATORADE: layout padrão que vem embutido no próprio exe.
- Object.assign(doc,require('./store-layout-default.json'));
  return doc;
 }
 // version: o cliente só aceita layout com version maior que o que já tem em cache; usar algo crescente.

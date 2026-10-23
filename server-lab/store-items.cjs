@@ -10,26 +10,17 @@ const zlib=require('node:zlib'),fs=require('node:fs'),path=require('node:path');
 const {Builder,Crc32,GetField}=require(process.env.REFERENCE_CODEC||require('./reference-codecs.cjs').granitePath());
 const data=JSON.parse(fs.readFileSync(path.join(__dirname,'store-items.json'),'utf8'));
 // Página pedida pelo jogo -> categorias LAB_* que ela vende.
+// Só a Swag's vende (todas as categorias LAB_*); outras páginas recebem lista vazia.
 const PAGES={
- 'PAGE:TKWORLD_NBA_STORE':['STORE_CATEGORY:LAB_NBA_JERSEYS','STORE_CATEGORY:LAB_NBA_TOPS','STORE_CATEGORY:LAB_NBA_OUTERWEAR','STORE_CATEGORY:LAB_NBA_BOTTOMS','STORE_CATEGORY:LAB_NBA_HATS'],
- 'PAGE:TKWORLD_PARK_CLOTHING_STORE':['STORE_CATEGORY:LAB_SWAG_TOPS','STORE_CATEGORY:LAB_SWAG_OUTERWEAR','STORE_CATEGORY:LAB_SWAG_BOTTOMS','STORE_CATEGORY:LAB_SWAG_HATS','STORE_CATEGORY:LAB_SWAG_GLASSES','STORE_CATEGORY:LAB_SWAG_JEWELRY','STORE_CATEGORY:LAB_SWAG_SLEEVES','STORE_CATEGORY:LAB_SWAG_COMPRESSION','STORE_CATEGORY:LAB_SWAG_SOCKS','STORE_CATEGORY:LAB_SWAG_BACKPACKS','STORE_CATEGORY:LAB_BRAND_NIKE','STORE_CATEGORY:LAB_BRAND_JORDAN'],
- 'PAGE:TKWORLD_FOOT_LOCKER':['STORE_CATEGORY:LAB_SHOES','STORE_CATEGORY:LAB_SHOES_NIKE','STORE_CATEGORY:LAB_SHOES_JORDAN','STORE_CATEGORY:LAB_SHOES_ADIDAS','STORE_CATEGORY:LAB_SHOES_UA','STORE_CATEGORY:LAB_SHOES_CONVERSE','STORE_CATEGORY:LAB_SWAG_SOCKS'],
- 'PAGE:TKWORLD_NIKE_STORE':['STORE_CATEGORY:LAB_SHOES_NIKE','STORE_CATEGORY:LAB_BRAND_NIKE'],
- 'PAGE:TKWORLD_JORDAN_STORE':['STORE_CATEGORY:LAB_SHOES_JORDAN','STORE_CATEGORY:LAB_BRAND_JORDAN'],
- 'PAGE:TKWORLD_UNDERARMOUR_STORE':['STORE_CATEGORY:LAB_SHOES_UA'],
- 'PAGE:TKWORLD_CONVERSE_STORE':['STORE_CATEGORY:LAB_SHOES_CONVERSE'],
- 'PAGE:TKWORLD_PUMA_STORE':['STORE_CATEGORY:LAB_SHOES_PUMA','STORE_CATEGORY:LAB_BRAND_PUMA'],
- 'PAGE:TKWORLD_NEW_BALANCE_STORE':['STORE_CATEGORY:LAB_SHOES_NEW_BALANCE'],
- 'PAGE:TKWORLD_ADIDAS_STORE':['STORE_CATEGORY:LAB_SHOES_ADIDAS','STORE_CATEGORY:LAB_BRAND_ADIDAS'],
- 'PAGE:TKWORLD_TATTOO_PARLOR':['SLEEVES','ANIMALS','PREMIUM','NBA','LETTERS_AND_NUMBERS','MISCELLANEOUS'].map(t=>'STORE_CATEGORY:TATTOO_'+t),
+ 'PAGE:TKWORLD_PARK_CLOTHING_STORE':null,
 };
 const PAGE_BY_CRC=new Map(Object.keys(PAGES).map(p=>[Crc32(p)>>>0,p]));
 const tagCrc=data.tags.map(t=>Crc32(t)|0);
 function pageOf(field){
  if(!field)return null;
  for(const v of [field.value,field.Value,field.Data,field.String,field.Raw&&Buffer.isBuffer(field.Raw)?field.Raw.toString('utf8').replace(/\0+$/,''):null])
-  if(typeof v==='string'&&PAGES[v.replace(/\0+$/,'')])return v.replace(/\0+$/,'');
- if(field.Raw&&Buffer.isBuffer(field.Raw)){const w=field.Raw.toString('utf16le').replace(/\0+$/,'');if(PAGES[w])return w;}
+  if(typeof v==='string'&&(v.replace(/\0+$/,'') in PAGES))return v.replace(/\0+$/,'');
+ if(field.Raw&&Buffer.isBuffer(field.Raw)){const w=field.Raw.toString('utf16le').replace(/\0+$/,'');if(w in PAGES)return w;}
  for(const v of [field.Data1,field.Value]) if(Number.isInteger(v)&&PAGE_BY_CRC.has(v>>>0))return PAGE_BY_CRC.get(v>>>0);
  return null;
 }
@@ -52,7 +43,7 @@ function itemsFor(page,price){
  // Página desconhecida (barbearia, Wheelz...): nenhum item; mandar o catálogo inteiro fazia a loja de tatuagem
  // tentar provar roupas como tatuagem e o jogo fechava.
  if(!page)return [];
- const wanted=new Set(PAGES[page].map(t=>data.tags.indexOf(t)));
+ const wanted=new Set((PAGES[page]||data.tags.filter(t=>t.startsWith('STORE_CATEGORY:LAB_'))).map(t=>data.tags.indexOf(t)));
  const rows=[];
  for(const [id,basePrice,tags] of data.items){
   const own=tags.filter(t=>wanted.has(t));
