@@ -2,17 +2,12 @@
 # Precisa de administrador (mexe no hosts e nos certificados confiáveis do Windows). Ao fechar (Ctrl+C), desfaz tudo:
 # o hosts volta como estava e o certificado criado aqui é removido. NÃO toca no servidor de ninguém — aponta o
 # endereço do jogo para 127.0.0.1 (o seu PC) e grava o que o jogo pede em server-lab\captures\.
-param([int]$Port = 22004, [switch]$Elevated)
+param([int]$Port = 22004)
 $ErrorActionPreference = 'Stop'
-$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrators')
-if (-not $isAdmin) {
-  if ($Elevated) {
-    # já tentamos elevar uma vez: não reabre (evita loop de janelas)
-    Write-Host 'Nao consegui rodar como administrador (o Windows nao liberou a elevacao). Nada foi alterado.' -ForegroundColor Red
-    Read-Host 'Enter para fechar' | Out-Null; exit 1
-  }
-  Start-Process powershell.exe -Verb RunAs -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-File', "`"$PSCommandPath`"", '-Port', $Port, '-Elevated')
-  exit
+# Sem auto-elevacao: este script nunca abre outra janela. Abra o PowerShell como administrador e rode-o la.
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrators')) {
+  Write-Host 'Rode este script no PowerShell ABERTO COMO ADMINISTRADOR (botao direito > Executar como administrador). Nada foi alterado.' -ForegroundColor Red
+  exit 1
 }
 $HostName = 'nba2k22-ws.2ksports.com'
 $Root = $PSScriptRoot
