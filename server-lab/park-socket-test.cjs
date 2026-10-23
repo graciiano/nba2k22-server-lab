@@ -41,8 +41,9 @@ const courtsOf = got => got.filter(f => f.readUInt32BE(4) === S.PACKET.ObjectDat
   try {
     const a = await connect(players[0]);
     const courts = courtsOf(a.got); assert.equal(courts.length, 1, 'court over the socket');
+    assert.ok(a.got.some(f => f.length >= 24 && f.readUInt32BE(4) === S.PACKET.RequestAck), 'handshake acked');
     // Entry reply connection bytes are reused on every server frame.
-    assert.ok(a.got.slice(1).every(f => f.subarray(8, 16).equals(a.got[0].subarray(8, 16))));
+    assert.ok(a.got.slice(1).filter(f => f.readUInt32BE(4) !== S.PACKET.RequestAck).every(f => f.subarray(8, 16).equals(a.got[0].subarray(8, 16))));
     const move = Buffer.alloc(30); move.writeUInt32LE(30, 0); move.writeUInt32BE(S.PACKET.Movement, 4); move.writeInt16BE(321, 16); move.writeInt16BE(5, 18); move.writeInt16BE(-654, 20); a.ws.send(move); await wait(50);
     // Atualização do próprio PLAYER: servidor confirma (REQUEST_ACK) e devolve o objeto na mesma versão.
     const upd = Buffer.alloc(42 + 20); upd.writeUInt32LE(upd.length, 0); upd.writeUInt32BE(S.PACKET.ClientUpdate, 4); upd.writeUInt32BE(0x5f000001, 8); upd.writeBigUInt64BE(7n, 16);

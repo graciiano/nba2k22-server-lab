@@ -490,6 +490,9 @@ function createPeer(hub, send, label) {
     const body = Buffer.from(bytes.subarray(list.DataOffset + f.Data1, list.DataOffset + f.Data1 + f.Data2));
     // Same validated 2K22 PLAYER prefix as mycourt-gameplay.cjs: Puid@37, State@69, CourtName@73.
     if (body.length < 77 || body.readBigUInt64BE(0) !== key || (body[16] & 0xfc) !== 0xfc || body.readBigUInt64LE(37) !== key) return { event: 'park-handshake-schema-mismatch' };
+    // O handshake é o pedido nº 1 do cliente (id em +16). Sem REQUEST_ACK ele fica pendente ~25 s e,
+    // enquanto há pedido pendente, UpdateParkState não roda: era a demora para conseguir entrar nos spots.
+    ack(bytes);
     peer.puid = key; peer.body = body; peer.version = body.readBigUInt64BE(8); peer.state = body.readUInt32LE(69);
     if (peer.machine) body.writeBigUInt64LE(peer.machine, 45);
     hub.publishPlayer(peer, hub.config.echoPlayerOnHandshake !== false);
