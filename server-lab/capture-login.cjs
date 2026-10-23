@@ -11,5 +11,9 @@ if (!pfxPath || !fs.existsSync(pfxPath)) { console.error('Falta CAPTURE_PFX (cer
 const tls = { pfx: fs.readFileSync(pfxPath), passphrase: process.env.CAPTURE_PFX_PASS || '' };
 const port = Number(process.env.PORT || 22004);
 const host = process.env.HOST || '127.0.0.1';
-const server = createLab({ tls, experimentalLogin: process.argv.includes('--experimental-login') });
+// Os serviços anunciados no login apontam pro endereço que o cliente usa, pras chamadas seguintes voltarem pra cá.
+if (!process.env.NBA_SERVICE_BASE) process.env.NBA_SERVICE_BASE = `https://nba2k22-ws.2ksports.com:${port}`;
+// Por padrão responde o login (--observar deixa só observando, respondendo 501).
+const experimentalLogin = !process.argv.includes('--observar');
+const server = createLab({ tls, experimentalLogin });
 server.listen(port, host, () => console.log(`captura em https://nba2k22-ws.2ksports.com:${port} (${host}:${port}) — abra o jogo pela Steam. Ctrl+C encerra.`));

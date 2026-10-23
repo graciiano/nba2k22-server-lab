@@ -20,9 +20,14 @@ const services=[{id:0xb5c3a734,url:'https://127.0.0.1:21022/Session/update',meth
  // Native attribute purchases only; shop/animation purchases are not accepted.
  {id:0x853da8f7,url:'https://127.0.0.1:21022/VirtualCurrency/purchase',method:'POST'}];
 function buildServices(){
+ // Base dos serviços: por padrão 127.0.0.1:21022 (fluxo antigo com redirect no exe). Na captura do cliente da
+ // Steam, NBA_SERVICE_BASE aponta pro endereço que o jogo usa (https://nba2k22-ws.2ksports.com:22004), para as
+ // chamadas seguintes (Accounts/get, StoreV4, ...) voltarem pro mesmo servidor.
+ const base=process.env.NBA_SERVICE_BASE||'https://127.0.0.1:21022';
  const b=new Builder();
  for(const service of services){
-  b.AddU32(0xc493acfe,service.id).AddString8(0x12bbf3ab,service.url).AddString8(0xa78a16c7,service.method);
+  const url=service.url.replace('https://127.0.0.1:21022',base);
+  b.AddU32(0xc493acfe,service.id).AddString8(0x12bbf3ab,url).AddString8(0xa78a16c7,service.method);
   // sub_1420842E0 selects VCFIELDLIST_SIZE for this enum under this field CRC.
   b.AddU32(0x8bbc3f05,0xb6c95773);
  }
