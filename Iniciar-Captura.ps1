@@ -4,9 +4,11 @@
 # endereço do jogo para 127.0.0.1 (o seu PC) e grava o que o jogo pede em server-lab\captures\.
 param([int]$Port = 22004)
 $ErrorActionPreference = 'Stop'
-# Sem auto-elevacao: este script nunca abre outra janela. Abra o PowerShell como administrador e rode-o la.
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrators')) {
-  Write-Host 'Rode este script no PowerShell ABERTO COMO ADMINISTRADOR (botao direito > Executar como administrador). Nada foi alterado.' -ForegroundColor Red
+# Deteccao de admin independente de idioma (papel interno, nao o nome "Administrators"/"Administradores").
+# Este script NUNCA abre outra janela: rode-o num PowerShell ja aberto como administrador.
+$admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $admin) {
+  Write-Host 'Rode este script num PowerShell ABERTO COMO ADMINISTRADOR (botao direito > Executar como administrador). Nada foi alterado.' -ForegroundColor Red
   exit 1
 }
 $HostName = 'nba2k22-ws.2ksports.com'
