@@ -130,6 +130,11 @@ function geometry(def) {
   return { n, pos, yaw, queues, forward, right };
 }
 
+const PLAYER_BITS = 21 * 8, F_DEST = 156, F_FACING = 157;
+const u32le = v => { const b = Buffer.alloc(4); b.writeUInt32LE(v >>> 0); return b; };
+const i32le = v => { const b = Buffer.alloc(4); b.writeInt32LE(v | 0); return b; };
+const vec4le = p => { const b = Buffer.alloc(16); b.writeFloatLE(p[0], 0); b.writeFloatLE(p[1], 4); b.writeFloatLE(p[2], 8); b.writeFloatLE(1, 12); return b; };
+
 function transform(g) {
   const c = Math.cos(g.yaw), s = Math.sin(g.yaw), b = Buffer.alloc(64);
   [c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, g.pos[0], g.pos[1], g.pos[2], 1].forEach((v, i) => b.writeFloatLE(Math.abs(v) < 1e-7 ? 0 : v, i * 4));
@@ -240,31 +245,36 @@ function createHub(lab, log = () => {}) {
     if (toSelf) owner.send(hub.playerFrame(owner, owner));
     if (hub.config.presence) for (const p of hub.parkPeers()) if (p !== owner && p.body) p.send(hub.playerFrame(owner, p));
   };
-  hub.setState = (peer, state, court) => {
+  // Muda State/CourtName com atualização parcial do PLAYER (bits 4 e 5) — republicar o corpo inteiro
+  // reenviava ServerDestination=(0,0,0) e o jogador andava para a origem ao sair do spot.
+  // dest opcional: { point:[x,y,z], facing } grava ServerDestination/Facing junto.
+  hub.setState = (peer, state, court, dest = null) => {
     if (!peer.body) return false;
     peer.body.writeUInt32LE(state >>> 0, 69); peer.body.writeUInt32LE(court ? court.id : 0, 73);
-    peer.state = state; hub.publishPlayer(peer); return true;
+    peer.state = state;
+    const fields = [[4, u32le(state)], [5, u32le(court ? court.id : 0)]];
+    if (dest) fields.push([F_DEST, vec4le(dest.point)], [F_FACING, i32le(dest.facing)]);
+    hub.sendPlayerDelta(peer, fields);
+    return true;
+  };
+  hub.sendPlayerDelta = (peer, fields) => {
+    const bitmap = Buffer.alloc(PLAYER_BITS / 8);
+    fields.sort((a, b) => a[0] - b[0]);
+    for (const [bit] of fields) bitmap[bit >> 3] |= 0x80 >> (bit & 7);
+    peer.version += 1n; peer.body.writeBigUInt64BE(peer.version, 8);
+    const head = Buffer.alloc(16); head.writeBigUInt64BE(peer.puid, 0); head.writeBigUInt64BE(peer.version, 8);
+    const payload = Buffer.concat([head, bitmap, ...fields.map(f => f[1])]);
+    peer.send(S.wrapObject(peer.puid, S.CLASS.Player, payload, peer.connection));
+    if (hub.config.presence) for (const p of hub.parkPeers()) if (p !== peer && p.body) p.send(S.wrapObject(peer.puid, S.CLASS.Player, payload, p.connection));
   };
 
   // Destino do Got Next: o cliente leva o jogador até PLAYER.ServerDestination (vec4) virado para
   // ServerDestinationFacing (i32). Sem isso ele anda para (0,0,0). Índices de campo do PLAYER 2K22
   // (impressora 0x1416B9350, corpo completo com 165 campos/bitmap de 21 bytes): State 4, CourtName 5,
   // ServerDestination 156, ServerDestinationFacing 157. Enviado como atualização parcial (só esses bits).
-  const PLAYER_BITS = 21 * 8, F_DEST = 156, F_FACING = 157;
-  hub.sendDestination = (peer, court, q, i) => {
-    if (!peer.body || hub.config.walkToSpot === false) return false;
-    const queue = court.g.queues[q]; if (!queue) return false;
-    const spot = add(queue.first, mul(queue.step, i));
-    const bitmap = Buffer.alloc(PLAYER_BITS / 8);
-    for (const bit of [F_DEST, F_FACING]) bitmap[bit >> 3] |= 0x80 >> (bit & 7);
-    const values = Buffer.alloc(20);
-    values.writeFloatLE(spot[0], 0); values.writeFloatLE(spot[1], 4); values.writeFloatLE(spot[2], 8); values.writeFloatLE(1, 12);
-    values.writeInt32LE(queue.facing | 0, 16);
-    peer.version += 1n; peer.body.writeBigUInt64BE(peer.version, 8);
-    const head = Buffer.alloc(16); head.writeBigUInt64BE(peer.puid, 0); head.writeBigUInt64BE(peer.version, 8);
-    peer.send(S.wrapObject(peer.puid, S.CLASS.Player, Buffer.concat([head, bitmap, values]), peer.connection));
-    peer.destination = spot;
-    return true;
+  hub.spotOf = (court, q, i) => {
+    const queue = court.g.queues[q]; if (!queue) return null;
+    return { spot: { point: add(queue.first, mul(queue.step, i)), facing: queue.facing }, exit: { point: add(queue.exit, mul(queue.step, i)), facing: queue.facing } };
   };
 
   hub.seatOf = puid => { for (const court of hub.courts.values()) for (let q = 0; q < 2; q++) { const i = court.queues[q].indexOf(puid); if (i >= 0) return { court, q, i }; } return null; };
@@ -285,8 +295,8 @@ function createHub(lab, log = () => {}) {
     if (i < 0) { if (previous) previous.court.queues[previous.q][previous.i] = peer.puid; return { ok: false, reason: 'court-full' }; }
     court.queues[q][i] = peer.puid;
     if (previous && previous.court !== court) hub.broadcastCourt(previous.court);
-    hub.setState(peer, S.STATE.GOT_NEXT, court);
-    hub.sendDestination(peer, court, q, i);
+    const where = hub.spotOf(court, q, i); peer.exitPoint = where && where.exit;
+    hub.setState(peer, S.STATE.GOT_NEXT, court, hub.config.walkToSpot === false ? null : where && where.spot);
     hub.broadcastCourt(court);
     hub.maybeStart(court, peer);
     return { ok: true, queue: q, seat: i };
@@ -358,7 +368,7 @@ function createHub(lab, log = () => {}) {
     court.game = null; court.queues = [Array(court.g.n).fill(0n), Array(court.g.n).fill(0n)];
     if (hub.relay) hub.relay.forget(game.token);
     hub.broadcastCourt(court);
-    for (const id of all) { const p = hub.byPuid(id); if (p) hub.setState(p, S.STATE.WALKING, null); }
+    for (const id of all) { const p = hub.byPuid(id); if (p) hub.setState(p, S.STATE.WALKING, null, p.exitPoint); }
     if (game.ghost && game.ghost.body) {
       const owner = hub.byPuid(game.home[0]), b = game.ghost.body;
       b.writeBigUInt64BE(b.readBigUInt64BE(8) + 1n, 8); b.writeUInt32LE(S.STATE.WALKING >>> 0, 69); b.writeUInt32LE(0, 73);
@@ -538,7 +548,7 @@ function createPeer(hub, send, label) {
       return { event: result.ok ? 'park-join' : 'park-join-refused', court: court.def.name, ...result };
     }
     if (command === S.CRC.LEAVE) {
-      hub.release(peer.puid); hub.setState(peer, S.STATE.WALKING, null); ack(bytes);
+      hub.release(peer.puid); hub.setState(peer, S.STATE.WALKING, null, peer.exitPoint); ack(bytes);
       return { event: 'park-leave', court: court.def.name };
     }
     if (command === S.CRC.READY) { ack(bytes); hub.markReady(court, peer.puid); return { event: 'park-ready', court: court.def.name }; }
