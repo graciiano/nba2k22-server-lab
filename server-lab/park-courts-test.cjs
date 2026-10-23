@@ -96,9 +96,11 @@ const u8 = b => b[0], u32 = b => b.readUInt32LE(0), u64 = b => b.readBigUInt64LE
   a.sent.length = 0;
   const j1 = a.req(key, [[S.CRC.COMMAND, S.CRC.JOIN], [S.CRC.AREA, 0]]);
   // Destino do Got Next: atualização parcial do PLAYER só com ServerDestination(156)+Facing(157).
-  const dest = a.sent.filter(f => f.readUInt32BE(4) === S.PACKET.ObjectData && f.readUInt32BE(24) === S.CLASS.Player && f.length === 32 + 65).at(-1);
+  const dest = a.sent.filter(f => f.readUInt32BE(4) === S.PACKET.ObjectData && f.readUInt32BE(24) === S.CLASS.Player && f.length === 32 + 66).at(-1);
   assert.ok(dest, 'state+destination update sent'); assert.equal(dest[32 + 16], 0x0c); assert.equal(dest[32 + 16 + 19], 0x0c);
-  assert.equal(dest.readUInt32LE(32 + 37), S.STATE.GOT_NEXT); assert.equal(dest.readFloatLE(32 + 45 + 12), 1);
+  assert.equal(dest.readUInt32LE(32 + 37), S.STATE.GOT_NEXT); assert.equal(dest.readFloatLE(32 + 46 + 12), 1);
+  // SpeedAbility (campo 81, u8) = 1 fora de partida; no corpo vem entre CourtName(5) e ServerDestination(156).
+  assert.equal(dest[32 + 16 + 10], 0x40, 'SpeedAbility bit'); assert.equal(dest[32 + 45], 1, 'SpeedAbility on outside games');
   assert.equal(j1.event, 'park-join'); assert.equal(j1.queue, 0);
   const pa = players(a.sent).find(p => p.key === a.puid);
   assert.equal(pa.state, S.STATE.GOT_NEXT); assert.equal(pa.court, courtId('A'));

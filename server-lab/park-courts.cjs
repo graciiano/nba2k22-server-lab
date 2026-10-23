@@ -21,7 +21,7 @@ const S = require('./park-schema.cjs');
 const codec = require(process.env.REFERENCE_OPAL_CODEC || require('./reference-codecs.cjs').opalPath());
 
 const DEFAULT_CONFIG = {
-  presence: true, soloStart: false, requestAck: true, echoPlayerOnHandshake: true, soloDelayMs: 1500, readyTimeoutMs: 10000,
+  presence: true, speedOutsideGames: true, soloStart: false, requestAck: true, echoPlayerOnHandshake: true, soloDelayMs: 1500, readyTimeoutMs: 10000,
   relay: { address: '127.0.0.1', port: 21023 }, courts: [],
 };
 const COURT_TYPE_BY_TEAM = { 1: 6, 2: 5, 3: 4 }; // 2K19 reference values; override per court.
@@ -131,6 +131,10 @@ function geometry(def) {
 }
 
 const PLAYER_BITS = 21 * 8, F_DEST = 156, F_FACING = 157;
+// PLAYER.SpeedAbility (campo 81, u8; impressora 1416B9350: valor em +0x225, flag "dirty" em +0x226).
+// O servidor oficial ligava isso para quem pode correr rápido na cidade (ex.: Special Wing Shoe);
+// aqui fica 1 fora de partidas e 0 durante o jogo.
+const F_SPEED = 81;
 const u32le = v => { const b = Buffer.alloc(4); b.writeUInt32LE(v >>> 0); return b; };
 const i32le = v => { const b = Buffer.alloc(4); b.writeInt32LE(v | 0); return b; };
 const vec4le = p => { const b = Buffer.alloc(16); b.writeFloatLE(p[0], 0); b.writeFloatLE(p[1], 4); b.writeFloatLE(p[2], 8); b.writeFloatLE(1, 12); return b; };
@@ -254,9 +258,12 @@ function createHub(lab, log = () => {}) {
     peer.state = state;
     const fields = [[4, u32le(state)], [5, u32le(court ? court.id : 0)]];
     if (dest) fields.push([F_DEST, vec4le(dest.point)], [F_FACING, i32le(dest.facing)]);
+    if (hub.config.speedOutsideGames) fields.push([F_SPEED, Buffer.from([hub.speedFor(state)])]);
     hub.sendPlayerDelta(peer, fields);
     return true;
   };
+  hub.speedFor = state => (state >>> 0) === (S.STATE.PLAYING >>> 0) ? 0 : 1;
+  hub.sendSpeed = peer => { if (hub.config.speedOutsideGames && peer.body) hub.sendPlayerDelta(peer, [[F_SPEED, Buffer.from([hub.speedFor(peer.state)])]]); };
   hub.sendPlayerDelta = (peer, fields) => {
     const bitmap = Buffer.alloc(PLAYER_BITS / 8);
     fields.sort((a, b) => a[0] - b[0]);
@@ -496,6 +503,7 @@ function createPeer(hub, send, label) {
     peer.puid = key; peer.body = body; peer.version = body.readBigUInt64BE(8); peer.state = body.readUInt32LE(69);
     if (peer.machine) body.writeBigUInt64LE(peer.machine, 45);
     hub.publishPlayer(peer, hub.config.echoPlayerOnHandshake !== false);
+    hub.sendSpeed(peer);
     if (hub.config.presence) for (const other of hub.parkPeers()) if (other !== peer && other.body) peer.send(hub.playerFrame(other, peer));
     const courts = hub.publishCourts(peer);
     return { event: 'park-player-accepted', courts, peers: hub.parkPeers().length };
