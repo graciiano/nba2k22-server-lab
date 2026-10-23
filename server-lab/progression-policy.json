@@ -4,5 +4,7 @@
   "respectBuildCaps": true,
   "shopItemsFree": true,
   "animationsFree": true,
-  "ownAllShopItems": true
+  "ownAllShopItems": true,
+  "freeShopAccounts": ["76561198372507462"],
+  "shopPriceOthers": 1000
 }

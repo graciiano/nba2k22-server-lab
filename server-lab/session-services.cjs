@@ -5,6 +5,8 @@ const services=[{id:0xb5c3a734,url:'https://127.0.0.1:21022/Session/update',meth
  // Observed 2K22 lookup in ONLINESTORE_CHECKINVENTORY_JOB_WITH_CUSTOM...
  // Experimental native inventory reply, persisted per account/build.
  {id:0xc39a9528,url:'https://127.0.0.1:21022/StoreV4/get_owned_items',method:'POST'},
+ // 1413BB580 (lojas físicas): layout/catálogo das lojas, resposta em store-layout.cjs.
+ {id:0x8f8f3e0c,url:'https://127.0.0.1:21022/StoreV4/get_layout',method:'POST'},
  {id:0xbacf5b81,url:'https://127.0.0.1:21022/MyCareer/Attributes/get',method:'POST'},
  {id:0x6dcbb27d,url:'https://127.0.0.1:21022/MyCareer/Attributes/price',method:'POST'},
  {id:0x8c262990,url:'https://127.0.0.1:21022/VirtualCurrency/balance',method:'POST'},

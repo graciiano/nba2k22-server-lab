@@ -15,7 +15,8 @@ const {createItemInventory}=require('./item-inventory.cjs');
   const nameBytes=Buffer.alloc(10);for(const [i,v] of [...'Jump'].entries())nameBytes.writeUInt16BE(v.charCodeAt(0),i*2);
   const names=await request('/Text/validate?x='+key,new c.Builder().AddBinary(0x6e46752f,nameBytes,c.Types.String16));
   assert.equal(names.status,200);assert.equal(c.GetField(decode(names.body),0x6e46752f).value,true);
-  const prices=await request('/VirtualCurrency/get_prices?x='+key,new c.Builder().AddU32(c.Crc32('ITEM_0'),123));assert.equal(prices.status,200);assert.equal(c.GetU64(decode(prices.body),c.Crc32('PRICE_0')),0n);
+  const prices=await request('/VirtualCurrency/get_prices?x='+key,new c.Builder().AddU32(c.Crc32('ITEM_0'),123));assert.equal(prices.status,200);{const pol=JSON.parse(require('node:fs').readFileSync(require('node:path').join(__dirname,'progression-policy.json'),'utf8'));const expected=Array.isArray(pol.freeShopAccounts)?BigInt(pol.shopPriceOthers??1000):0n;assert.equal(c.GetU64(decode(prices.body),c.Crc32('PRICE_0')),expected);}
+  const layout=await request('/StoreV4/get_layout?x='+key,new c.Builder().AddU32(0x952ef509,1));assert.equal(layout.status,200);{const lf=decode(layout.body),doc=JSON.parse(z.inflateSync(c.GetField(lf,0xe1e79306).Raw).subarray(0,-1));assert.ok(doc.version>0&&doc.SWAGS.length>0&&doc.SWAGS[0][0][0].tag==='SWAG_SHIRTS');assert.equal(c.GetU64(lf,0x6cb1bd26),BigInt(z.inflateSync(c.GetField(lf,0xe1e79306).Raw).length));}
   const proposals=[{item_crc:123,item_type:0x298ec8aa,count:1,savebound:true,expected_price:0}];
   const purchase=()=>new c.Builder().AddBinary(0x3d366503,z.deflateSync(Buffer.from(JSON.stringify(proposals)))).AddU64(0xd5e5f21d,0n);
   const bought=await request('/VirtualCurrency/items/purchase?x='+key,purchase());assert.equal(bought.status,200);assert.ok(c.GetU64(decode(bought.body),0x8f1fa615)>0n);

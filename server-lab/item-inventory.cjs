@@ -2,14 +2,14 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),zlib=require('node:zlib');
 const c=require(process.env.REFERENCE_CODEC||require('./reference-codecs.cjs').granitePath());
 const CUSTOM_IDS=new Set([0x5fda268a,0x28dd161c,0xb1d447a6,0xc6d37730,0x58b7e293,0x2fb0d205]);
-function readItemPurchase(fields){
+function readItemPurchase(fields,allowedPrice=0){
  const blob=c.GetField(fields,0x3d366503);
  if(!blob||blob.Type!==c.Types.Binary||!Buffer.isBuffer(blob.Raw))throw Error('Missing item payload');
  const rows=JSON.parse(zlib.inflateSync(blob.Raw,{maxOutputLength:262144}).toString('utf8'));
  if(!Array.isArray(rows)||!rows.length||rows.length>32)throw Error('Invalid item count');
  const save=c.GetU64(fields,0xd5e5f21d);
  return rows.map(row=>{
-  if(!row||!Number.isInteger(row.item_crc)||row.item_crc<1||row.item_crc>0xffffffff||row.count!==1||typeof row.savebound!=='boolean'||row.expected_price!==0)throw Error('Unsupported item proposal');
+  if(!row||!Number.isInteger(row.item_crc)||row.item_crc<1||row.item_crc>0xffffffff||row.count!==1||typeof row.savebound!=='boolean'||(row.expected_price!==0&&row.expected_price!==allowedPrice))throw Error('Unsupported item proposal');
   // Local builds can legitimately submit cloud-save ID zero (captured client).
   if(row.savebound&&save===null)throw Error('Missing build binding');
   const custom=row.item_type===0xf72245fd;
@@ -30,8 +30,8 @@ function createItemInventory(directory){
  const file=path.join(directory,'item-inventory.json');
  function load(){if(!fs.existsSync(file))return {version:1,next:1,accounts:{}};const data=JSON.parse(fs.readFileSync(file,'utf8'));if(data.version!==1||!Number.isSafeInteger(data.next)||data.next<1||!data.accounts||typeof data.accounts!=='object')throw Error('Invalid local inventory');return data;}
  function owner(user){if(!user||user==='0')throw Error('Missing account identity');return crypto.createHash('sha256').update('items:'+user).digest('hex');}
- function purchase(user,fields){
-  const proposals=readItemPurchase(fields),data=load(),key=owner(user),owned=data.accounts[key]||[],accepted=[];
+ function purchase(user,fields,allowedPrice=0){
+  const proposals=readItemPurchase(fields,allowedPrice),data=load(),key=owner(user),owned=data.accounts[key]||[],accepted=[];
   for(const proposal of proposals){
    let item=owned.find(x=>x.item_id===proposal.item_id&&x.save===proposal.save&&(!proposal.custom||x.attribute.guid===proposal.attribute.guid));
    if(item){if(proposal.custom)item.attribute=proposal.attribute;}

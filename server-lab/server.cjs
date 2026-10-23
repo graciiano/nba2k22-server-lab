@@ -37,6 +37,12 @@ function createLab(options={}) {
 }
   const saveSessions=()=>{fs.mkdirSync(path.dirname(sessionFile),{recursive:true});fs.writeFileSync(sessionFile+'.tmp',JSON.stringify([...sessions]));fs.renameSync(sessionFile+'.tmp',sessionFile);};
   const captures = options.captureDir || path.join(__dirname,'captures');
+  function shopPolicyFor(user){
+   let policy={};try{const f=path.join(__dirname,'progression-policy.json');if(fs.existsSync(f))policy=JSON.parse(fs.readFileSync(f,'utf8'));}catch{}
+   const list=Array.isArray(policy.freeShopAccounts)?policy.freeShopAccounts.map(String):null;
+   const free=!list||(!!user&&list.includes(String(user)));
+   return {free,price:free?0:Number(policy.shopPriceOthers??1000)};
+  }
   const itemInventory=require('./item-inventory.cjs').createItemInventory(path.dirname(sessionFile));
   fs.mkdirSync(captures,{recursive:true});
   const experiment = options.experimentalLogin === true;
@@ -57,7 +63,7 @@ function createLab(options={}) {
     fs.writeFileSync(path.join(captures,captureId+'.bin'),body);
     fs.writeFileSync(path.join(captures,captureId+'.json'),JSON.stringify({method:req.method,url:route,queryNames:[...requestUrl.searchParams.keys()],headerNames:Object.keys(req.headers),bytes:size,parseOk:parsed.Ok,error:parsed.Ok?undefined:String(parsed.Error.message),fields:parsed.Ok?parsed.Parsed.Fields.map(f=>({crc:f.CrcHex,type:f.TypeHex})):[]},null,2));
     if(!parsed.Ok){res.writeHead(400);res.end('Unrecognized field-list body');return;}
-    if(req.method!=='POST' || !['/Session/login','/Session/update','/Accounts/get','/World/connect','/MyCareer/Attributes/get','/MyCareer/Attributes/price','/VirtualCurrency/balance','/VirtualCurrency/purchase','/VirtualCurrency/get_prices','/VirtualCurrency/items/purchase','/StoreV4/get_owned_items','/Text/validate'].includes(route)){res.writeHead(501);res.end('Service not implemented');return;}
+    if(req.method!=='POST' || !['/Session/login','/Session/update','/Accounts/get','/World/connect','/MyCareer/Attributes/get','/MyCareer/Attributes/price','/VirtualCurrency/balance','/VirtualCurrency/purchase','/VirtualCurrency/get_prices','/VirtualCurrency/items/purchase','/StoreV4/get_owned_items','/StoreV4/get_layout','/Text/validate'].includes(route)){res.writeHead(501);res.end('Service not implemented');return;}
     if(!experiment){res.writeHead(501);res.end('Capture mode: login replies disabled');return;}
     const fields=parsed.Parsed.Fields;
     let key;
@@ -92,7 +98,10 @@ function createLab(options={}) {
   try{const file=path.join(__dirname,'progression-policy.json');const policy=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):{};reply=require('./attribute-prices.cjs').buildAttributePrices(fields,{base:policy.attributePriceBase??0,step:policy.attributePriceStep??0});}catch{res.writeHead(400);res.end('Invalid attribute price request');return;}
  }
  if(route==='/VirtualCurrency/get_prices'){
-  try{reply=require('./item-prices.cjs').buildItemPrices(fields);}catch{res.writeHead(400);res.end('Invalid item price request');return;}
+  // Política por conta: contas em "freeShopAccounts" (ou todas, se a lista não existir) têm tudo grátis e
+  // já possuído; as demais veem o preço "shopPriceOthers" e compram normalmente com VC.
+  const shop=shopPolicyFor(sessions.get(key.toString())?.userId);
+  try{reply=require('./item-prices.cjs').buildItemPrices(fields,shop.price);}catch{res.writeHead(400);res.end('Invalid item price request');return;}
   // progression-policy.json "ownAllShopItems": itens exibidos na loja passam a ser da conta (roupas,
   // animações etc. liberadas sem compra). Registra também o catálogo visto em shop-catalog.json.
   try{
@@ -101,8 +110,11 @@ function createLab(options={}) {
    const catFile=path.join(__dirname,'shop-catalog.json'),cat=fs.existsSync(catFile)?JSON.parse(fs.readFileSync(catFile,'utf8')):[];
    const merged=[...new Set([...cat,...ids])];if(merged.length!==cat.length){fs.writeFileSync(catFile+'.tmp',JSON.stringify(merged));fs.renameSync(catFile+'.tmp',catFile);}
    const user=sessions.get(key.toString())?.userId;
-   if(policy.ownAllShopItems&&user&&user!=='0')itemInventory.grant(user,ids);
+   if(policy.ownAllShopItems&&shop.free&&user&&user!=='0')itemInventory.grant(user,ids);
   }catch(e){console.error('shop grant failed:',e.message);}
+ }
+ if(route==='/StoreV4/get_layout'){
+  reply=require('./store-layout.cjs').buildStoreLayout();
  }
  if(route==='/Text/validate'){
   try{reply=require('./name-validation.cjs').buildNameValidation(fields,parsed.Parsed.Data);}catch{res.writeHead(400);res.end('Invalid name validation request');return;}
@@ -110,7 +122,7 @@ function createLab(options={}) {
  if(route==='/VirtualCurrency/items/purchase'||route==='/StoreV4/get_owned_items'){
   const user=sessions.get(key.toString()).userId;
   if(!user||user==='0'){res.writeHead(409);res.end('Laboratory account identity unresolved');return;}
-  try{reply=route==='/VirtualCurrency/items/purchase'?itemInventory.purchase(user,fields):itemInventory.inventory(user,fields);}catch{res.writeHead(400);res.end('Unsupported item inventory request');return;}
+  try{reply=route==='/VirtualCurrency/items/purchase'?itemInventory.purchase(user,fields,shopPolicyFor(user).price):itemInventory.inventory(user,fields);}catch{res.writeHead(400);res.end('Unsupported item inventory request');return;}
  }
  if(route==='/MyCareer/Attributes/get'){
   // First-session experimental empty server record. Optional progression
