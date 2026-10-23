@@ -9,7 +9,7 @@ function readItemPurchase(fields,allowedPrice=0){
  if(!Array.isArray(rows)||!rows.length||rows.length>32)throw Error('Invalid item count');
  const save=c.GetU64(fields,0xd5e5f21d);
  return rows.map(row=>{
-  if(!row||!Number.isInteger(row.item_crc)||row.item_crc<1||row.item_crc>0xffffffff||row.count!==1||typeof row.savebound!=='boolean'||(row.expected_price!==0&&row.expected_price!==allowedPrice))throw Error('Unsupported item proposal');
+  if(!row||!Number.isInteger(row.item_crc)||row.item_crc<1||row.item_crc>0xffffffff||row.count!==1||typeof row.savebound!=='boolean'||(row.expected_price!==0&&row.expected_price!==(typeof allowedPrice==='function'?allowedPrice(row.item_crc>>>0):allowedPrice)))throw Error('Unsupported item proposal');
   // Local builds can legitimately submit cloud-save ID zero (captured client).
   if(row.savebound&&save===null)throw Error('Missing build binding');
   const custom=row.item_type===0xf72245fd;
@@ -44,9 +44,12 @@ function createItemInventory(directory){
   for(const item of accepted)reply.AddU32(0xfd76cfbd,item.item_id).AddU64(0x8f1fa615,BigInt(item.instance_id));
   return reply;
  }
- function inventory(user,fields){
+ function ownedRows(user,fields){
   const save=c.GetU64(fields,0xd5e5f21d),owned=load().accounts[owner(user)]||[];
-  const rows=owned.filter(x=>x.save===null||(save!==null&&x.save===save.toString())).map(x=>({item_id:x.item_id,instance_id:x.instance_id,...(x.custom?{attribute:x.attribute}:{})}));
+  return owned.filter(x=>x.save===null||(save!==null&&x.save===save.toString())).map(x=>({item_id:x.item_id,instance_id:x.instance_id,...(x.custom?{attribute:x.attribute}:{})}));
+ }
+ function inventory(user,fields){
+  const rows=ownedRows(user,fields);
   // Native 1405975E0 ->1405A3430: zlib-compressed JSON table and U64 size.
   // JSON is parsed into native nested FieldLists consumed by1405AD670/1405ABE40.
   // 141E70660 takes a C string, so reserve an explicit terminator.
@@ -68,7 +71,7 @@ function createItemInventory(directory){
   data.accounts[key]=owned;fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(file+'.tmp',JSON.stringify(data));fs.renameSync(file+'.tmp',file);
   return added;
  }
- return {purchase,inventory,grant};
+ return {purchase,inventory,grant,ownedRows};
 }
 module.exports={readItemPurchase,createItemInventory};
 

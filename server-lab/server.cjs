@@ -63,7 +63,7 @@ function createLab(options={}) {
     fs.writeFileSync(path.join(captures,captureId+'.bin'),body);
     fs.writeFileSync(path.join(captures,captureId+'.json'),JSON.stringify({method:req.method,url:route,queryNames:[...requestUrl.searchParams.keys()],headerNames:Object.keys(req.headers),bytes:size,parseOk:parsed.Ok,error:parsed.Ok?undefined:String(parsed.Error.message),fields:parsed.Ok?parsed.Parsed.Fields.map(f=>({crc:f.CrcHex,type:f.TypeHex})):[]},null,2));
     if(!parsed.Ok){res.writeHead(400);res.end('Unrecognized field-list body');return;}
-    if(req.method!=='POST' || !['/Session/login','/Session/update','/Accounts/get','/World/connect','/MyCareer/Attributes/get','/MyCareer/Attributes/price','/VirtualCurrency/balance','/VirtualCurrency/purchase','/VirtualCurrency/get_prices','/VirtualCurrency/items/purchase','/StoreV4/get_owned_items','/StoreV4/get_layout','/Text/validate'].includes(route)){res.writeHead(501);res.end('Service not implemented');return;}
+    if(req.method!=='POST' || !['/Session/login','/Session/update','/Accounts/get','/World/connect','/MyCareer/Attributes/get','/MyCareer/Attributes/price','/VirtualCurrency/balance','/VirtualCurrency/purchase','/VirtualCurrency/get_prices','/VirtualCurrency/items/purchase','/StoreV4/get_owned_items','/StoreV4/get_layout','/StoreV4/get_items','/Text/validate'].includes(route)){res.writeHead(501);res.end('Service not implemented');return;}
     if(!experiment){res.writeHead(501);res.end('Capture mode: login replies disabled');return;}
     const fields=parsed.Parsed.Fields;
     let key;
@@ -101,7 +101,7 @@ function createLab(options={}) {
   // Política por conta: contas em "freeShopAccounts" (ou todas, se a lista não existir) têm tudo grátis e
   // já possuído; as demais veem o preço "shopPriceOthers" e compram normalmente com VC.
   const shop=shopPolicyFor(sessions.get(key.toString())?.userId);
-  try{reply=require('./item-prices.cjs').buildItemPrices(fields,shop.price);}catch{res.writeHead(400);res.end('Invalid item price request');return;}
+  try{const base=require('./store-items.cjs').basePrice;reply=require('./item-prices.cjs').buildItemPrices(fields,shop.free?0:item=>base(item)??shop.price);}catch{res.writeHead(400);res.end('Invalid item price request');return;}
   // progression-policy.json "ownAllShopItems": itens exibidos na loja passam a ser da conta (roupas,
   // animações etc. liberadas sem compra). Registra também o catálogo visto em shop-catalog.json.
   try{
@@ -113,6 +113,14 @@ function createLab(options={}) {
    if(policy.ownAllShopItems&&shop.free&&user&&user!=='0')itemInventory.grant(user,ids);
   }catch(e){console.error('shop grant failed:',e.message);}
  }
+ if(route==='/StoreV4/get_items'){
+  const user=sessions.get(key.toString()).userId;
+  if(!user||user==='0'){res.writeHead(409);res.end('Laboratory account identity unresolved');return;}
+  const shop=shopPolicyFor(user);
+  const out=require('./store-items.cjs').buildStoreItems(fields,{price:shop.free?0:null,ownedRows:itemInventory.ownedRows(user,fields)});
+  console.log('store items',out.page||'(todas)','bytes',out.count,shop.free?'gratis':'preco normal');
+  reply=out.builder;
+ }
  if(route==='/StoreV4/get_layout'){
   reply=require('./store-layout.cjs').buildStoreLayout();
  }
@@ -122,7 +130,7 @@ function createLab(options={}) {
  if(route==='/VirtualCurrency/items/purchase'||route==='/StoreV4/get_owned_items'){
   const user=sessions.get(key.toString()).userId;
   if(!user||user==='0'){res.writeHead(409);res.end('Laboratory account identity unresolved');return;}
-  try{reply=route==='/VirtualCurrency/items/purchase'?itemInventory.purchase(user,fields,shopPolicyFor(user).price):itemInventory.inventory(user,fields);}catch{res.writeHead(400);res.end('Unsupported item inventory request');return;}
+  try{reply=route==='/VirtualCurrency/items/purchase'?itemInventory.purchase(user,fields,(sp=>sp.free?0:item=>require('./store-items.cjs').basePrice(item)??sp.price)(shopPolicyFor(user))):itemInventory.inventory(user,fields);}catch{res.writeHead(400);res.end('Unsupported item inventory request');return;}
  }
  if(route==='/MyCareer/Attributes/get'){
   // First-session experimental empty server record. Optional progression

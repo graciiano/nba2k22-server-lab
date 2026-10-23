@@ -13,24 +13,25 @@
 const zlib=require('node:zlib');
 const {Builder}=require(process.env.REFERENCE_CODEC||require('./reference-codecs.cjs').granitePath());
 
-// Os itens são ligados pela tag "STORE_CATEGORY:<categoria>" (como no layout padrão embutido no exe para
-// WHEELZ/TATTOOS/BARBERSHOP/GATORADE). Categorias = enum 14240CF60 (246 nomes; os conhecidos estão abaixo).
+// Os itens são ligados pela tag "STORE_CATEGORY:<categoria>": cada item da resposta de itens (store-items.cjs,
+// serviço 0xCD58A443) traz tag_crcs = CRC32 dessas tags, e a célula com a mesma tag mostra esses itens.
+// As categorias LAB_* são nossas (geradas a partir da base de itens do jogo, store-items.json).
+const T=(tag,title)=>['LAB_'+tag,title];
 const STORES={
- NBASTORE:[['NBA_SHIRTS_ALL','Camisetas NBA'],['NBA_HOODIES_AND_OUTERWEAR','Moletons e casacos'],['NBA_PANTS_AND_SHORTS','Calças e shorts'],
-  ['NBA_MITCHELL_NESS','Mitchell & Ness'],['NBA_OTHER_TEAM_HATS','Bonés de times'],['NBA_ACCESSORIES','Acessórios NBA'],
-  ['NBA_GLASSES','Óculos NBA'],['NBA_ALLSTAR','All-Star'],['NBA_HOLIDAY','Festas'],['NBA_MISC1','Coleção NBA'],['NBA_MISC2','Mais NBA']],
- SWAGS:[['SWAG_SHIRTS','Camisetas'],['SWAG_PREMIUM_SHIRTS','Camisetas premium'],['SWAG_HOODIES_AND_OUTERWEAR','Moletons e casacos'],
-  ['SWAG_PANTS_AND_SHORTS','Calças e shorts'],['SWAG_HATS','Bonés e chapéus'],['SWAG_ACCESSORIES','Acessórios'],
-  ['SWAG_JEWELRY','Joias'],['SWAG_GLASSES','Óculos'],['SWAG_EQUIPMENT','Equipamentos'],['SWAG_NIKE','Nike'],['SWAG_JORDAN','Jordan'],
-  ['SWAG_ADIDAS','adidas'],['SWAG_UA','Under Armour'],['SWAG_PROAM','Pro-Am'],['SWAG_HOLIDAY','Festas'],['SWAG_MISC1','Coleção'],['SWAG_MISC2','Mais roupas']],
- FOOTLOCKER:[['SHOE_NBA_NIKE','Nike'],['SHOE_NBA_NIKE_JORDAN','Jordan'],['SHOE_NBA_ADIDAS','adidas'],['SHOE_NBA_CONVERSE','Converse'],
-  ['SHOE_NBA_REEBOK','Reebok'],['SHOE_NBA','Tênis NBA'],['SHOE_MISC1','Coleção de tênis'],['SHOE_MISC2','Mais tênis']],
- NIKE_STORE:[['SWAG_NIKE','Roupas Nike'],['SHOE_NBA_NIKE','Tênis Nike']],
- JORDAN_STORE:[['SWAG_JORDAN','Roupas Jordan'],['SHOE_NBA_NIKE_JORDAN','Tênis Jordan']],
- UNDERARMOUR_STORE:[['SWAG_UA','Under Armour']],
- CONVERSE_STORE:[['SHOE_NBA_CONVERSE','Converse']],
- PUMA_STORE:[['SHOE_MISC1','Tênis'],['SWAG_MISC1','Roupas']],
- NEW_BALANCE_STORE:[['SHOE_MISC2','Tênis'],['SWAG_MISC2','Roupas']],
+ NBASTORE:[T('NBA_JERSEYS','Camisas de jogo'),T('NBA_TOPS','Camisetas'),T('NBA_OUTERWEAR','Moletons e casacos'),
+  T('NBA_BOTTOMS','Calças e shorts'),T('NBA_HATS','Bonés')],
+ SWAGS:[T('SWAG_TOPS','Camisetas'),T('SWAG_OUTERWEAR','Moletons e casacos'),T('SWAG_BOTTOMS','Calças e shorts'),
+  T('SWAG_HATS','Bonés e chapéus'),T('SWAG_GLASSES','Óculos e máscaras'),T('SWAG_JEWELRY','Joias e relógios'),
+  T('SWAG_SLEEVES','Mangas, faixas e fitas'),T('SWAG_COMPRESSION','Compressão'),T('SWAG_SOCKS','Meias'),
+  T('SWAG_BACKPACKS','Mochilas'),T('BRAND_NIKE','Nike'),T('BRAND_JORDAN','Jordan')],
+ FOOTLOCKER:[T('SHOES','Todos os tênis'),T('SHOES_NIKE','Nike'),T('SHOES_JORDAN','Jordan'),T('SHOES_ADIDAS','adidas'),
+  T('SHOES_UA','Under Armour'),T('SHOES_CONVERSE','Converse'),T('SWAG_SOCKS','Meias')],
+ NIKE_STORE:[T('SHOES_NIKE','Tênis Nike'),T('BRAND_NIKE','Roupas Nike')],
+ JORDAN_STORE:[T('SHOES_JORDAN','Tênis Jordan'),T('BRAND_JORDAN','Roupas Jordan')],
+ UNDERARMOUR_STORE:[T('SHOES_UA','Tênis Under Armour')],
+ CONVERSE_STORE:[T('SHOES_CONVERSE','Tênis Converse')],
+ PUMA_STORE:[T('SHOES_PUMA','Tênis Puma'),T('BRAND_PUMA','Roupas Puma')],
+ NEW_BALANCE_STORE:[T('SHOES_NEW_BALANCE','Tênis New Balance')],
 };
 function cell(category,title,store){return {cell_size:'ONE_BY_ONE',cell_type:'TAG',store_type:store,description:'',title,flag:'NONE',tag:'STORE_CATEGORY:'+category,logo_guid:''};}
 function layoutDocument(version=1){
