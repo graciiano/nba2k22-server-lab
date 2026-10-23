@@ -21,7 +21,7 @@ const S = require('./park-schema.cjs');
 const codec = require(process.env.REFERENCE_OPAL_CODEC || require('./reference-codecs.cjs').opalPath());
 
 const DEFAULT_CONFIG = {
-  presence: true, speedOutsideGames: true, soloStart: false, requestAck: true, echoPlayerOnHandshake: true, soloDelayMs: 1500, readyTimeoutMs: 10000,
+  presence: true, speedOutsideGames: false, soloStart: false, requestAck: true, echoPlayerOnHandshake: true, soloDelayMs: 1500, readyTimeoutMs: 10000,
   relay: { address: '127.0.0.1', port: 21023 }, courts: [],
 };
 const COURT_TYPE_BY_TEAM = { 1: 6, 2: 5, 3: 4 }; // 2K19 reference values; override per court.
@@ -132,8 +132,8 @@ function geometry(def) {
 
 const PLAYER_BITS = 21 * 8, F_DEST = 156, F_FACING = 157;
 // PLAYER.SpeedAbility (campo 81, u8; impressora 1416B9350: valor em +0x225, flag "dirty" em +0x226).
-// O servidor oficial ligava isso para quem pode correr rápido na cidade (ex.: Special Wing Shoe);
-// aqui fica 1 fora de partidas e 0 durante o jogo.
+// ATENÇÃO: não é um liga/desliga — o cliente preenche com o rating de Velocidade (140987EE0: 25..99 +
+// boosts do atributo 0x18). Mandar 1 deixou o jogador lento. Desligado por padrão (speedOutsideGames).
 const F_SPEED = 81;
 const u32le = v => { const b = Buffer.alloc(4); b.writeUInt32LE(v >>> 0); return b; };
 const i32le = v => { const b = Buffer.alloc(4); b.writeInt32LE(v | 0); return b; };

@@ -17,10 +17,14 @@ const {Builder}=require(process.env.REFERENCE_CODEC||require('./reference-codecs
 // serviço 0xCD58A443) traz tag_crcs = CRC32 dessas tags, e a célula com a mesma tag mostra esses itens.
 // As categorias LAB_* são nossas (geradas a partir da base de itens do jogo, store-items.json).
 const T=(tag,title)=>['LAB_'+tag,title];
+// Grupo com subcategorias (célula com children, como PAGE:SKATEBOARD no layout padrão do exe).
+const SUB=[['TOPS','Camisetas e casacos'],['BOTTOMS','Calças e shorts'],['HATS','Chapéus e bonés'],['SHOES','Tênis e calçados'],
+ ['GLASSES','Óculos e máscaras'],['SLEEVES','Mangas, luvas e faixas'],['JEWELRY','Joias e colares'],['BACKPACKS','Mochilas'],['OUTFITS','Conjuntos e outros']];
+const G=(group,title)=>({group,title,children:SUB.map(([k,t])=>T(group+'_'+k,t))});
 // Só a Swag's fica ativa (pedido do usuário): todas as categorias ficam nela; as outras lojas não recebem layout
 // nem itens, então não geram mais pedidos de catálogo.
 const STORES={
- SWAGS:[T('SPECIAL_EVENTS','Itens especiais (eventos)'),T('SEASON_ITEMS','Itens de season'),T('SPECIAL_BOOSTS','Boosts (velocidade e atributos)'),
+ SWAGS:[G('SPECIAL','Itens especiais (eventos)'),G('SEASON','Itens de season'),T('SPECIAL_BOOSTS','Boosts (velocidade e atributos)'),
   T('SWAG_TOPS','Camisetas'),T('SWAG_OUTERWEAR','Moletons e casacos'),T('SWAG_BOTTOMS','Calças e shorts'),
   T('SWAG_HATS','Bonés e chapéus'),T('SWAG_GLASSES','Óculos e máscaras'),T('SWAG_JEWELRY','Joias e relógios'),
   T('NBA_JERSEYS','Camisas de jogo NBA'),T('NBA_TOPS','Camisetas NBA'),T('NBA_OUTERWEAR','Moletons e casacos NBA'),
@@ -31,12 +35,19 @@ const STORES={
   T('SWAG_BACKPACKS','Mochilas')],
 };
 function cell(category,title,store){return {cell_size:'ONE_BY_ONE',cell_type:'TAG',store_type:store,description:'',title,flag:'NONE',tag:'STORE_CATEGORY:'+category,logo_guid:''};}
+// Só mostra subcategorias que têm itens no catálogo.
+let catalogTags=null;
+function available(tag){
+ if(!catalogTags)try{catalogTags=new Set(require('./store-items.json').tags);}catch{catalogTags=new Set();}
+ return catalogTags.has('STORE_CATEGORY:'+tag);
+}
 function layoutDocument(version=1){
  const doc={version};
  for(const [store,sections] of Object.entries(STORES)){
   const pages=[];
   for(let i=0;i<sections.length;i+=6){
-   const cells=sections.slice(i,i+6).map(([tag,title])=>cell(tag,title,store));
+   const cells=sections.slice(i,i+6).map(x=>Array.isArray(x)?cell(x[0],x[1],store):
+    {...cell('',x.title,store),tag:'PAGE:LAB_'+x.group,children:x.children.filter(([t])=>available(t)).map(([t,n])=>cell(t,n,store))});
    pages.push(cells.length>3?[cells.slice(0,3),cells.slice(3)]:[cells]);
   }
   doc[store]=pages;
