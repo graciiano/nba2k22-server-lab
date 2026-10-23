@@ -21,7 +21,7 @@ const S = require('./park-schema.cjs');
 const codec = require(process.env.REFERENCE_OPAL_CODEC || require('./reference-codecs.cjs').opalPath());
 
 const DEFAULT_CONFIG = {
-  presence: true, speedOutsideGames: false, soloStart: false, requestAck: true, echoPlayerOnHandshake: true, soloDelayMs: 1500, readyTimeoutMs: 10000,
+  presence: true, speedOutsideGames: 140, soloStart: false, requestAck: true, echoPlayerOnHandshake: true, soloDelayMs: 1500, readyTimeoutMs: 10000,
   relay: { address: '127.0.0.1', port: 21023 }, courts: [],
 };
 const COURT_TYPE_BY_TEAM = { 1: 6, 2: 5, 3: 4 }; // 2K19 reference values; override per court.
@@ -133,7 +133,11 @@ function geometry(def) {
 const PLAYER_BITS = 21 * 8, F_DEST = 156, F_FACING = 157;
 // PLAYER.SpeedAbility (campo 81, u8; impressora 1416B9350: valor em +0x225, flag "dirty" em +0x226).
 // ATENÇÃO: não é um liga/desliga — o cliente preenche com o rating de Velocidade (140987EE0: 25..99 +
-// boosts do atributo 0x18). Mandar 1 deixou o jogador lento. Desligado por padrão (speedOutsideGames).
+// boosts do atributo 0x18) e o valor vindo do servidor manda no movimento (mandar 1 deixou o jogador lento).
+// speedOutsideGames = rating usado fora de partidas (0/false desliga); durante o jogo volta o valor original
+// do handshake. Offset no corpo: 237 (conferido em handshake real: 99 com Overall 99 em 127). O rating
+// normal vai até 99; valores acima (padrão 140) são o "correr rápido" fora de partidas.
+const SPEED_OFFSET = 237;
 const F_SPEED = 81;
 const u32le = v => { const b = Buffer.alloc(4); b.writeUInt32LE(v >>> 0); return b; };
 const i32le = v => { const b = Buffer.alloc(4); b.writeInt32LE(v | 0); return b; };
@@ -258,12 +262,13 @@ function createHub(lab, log = () => {}) {
     peer.state = state;
     const fields = [[4, u32le(state)], [5, u32le(court ? court.id : 0)]];
     if (dest) fields.push([F_DEST, vec4le(dest.point)], [F_FACING, i32le(dest.facing)]);
-    if (hub.config.speedOutsideGames) fields.push([F_SPEED, Buffer.from([hub.speedFor(state)])]);
+    if (hub.speedEnabled(peer)) fields.push([F_SPEED, Buffer.from([hub.speedFor(peer, state)])]);
     hub.sendPlayerDelta(peer, fields);
     return true;
   };
-  hub.speedFor = state => (state >>> 0) === (S.STATE.PLAYING >>> 0) ? 0 : 1;
-  hub.sendSpeed = peer => { if (hub.config.speedOutsideGames && peer.body) hub.sendPlayerDelta(peer, [[F_SPEED, Buffer.from([hub.speedFor(peer.state)])]]); };
+  hub.speedEnabled = peer => !!hub.config.speedOutsideGames && !!peer.baseSpeed;
+  hub.speedFor = (peer, state) => (state >>> 0) === (S.STATE.PLAYING >>> 0) ? peer.baseSpeed : Math.max(1, Math.min(255, Number(hub.config.speedOutsideGames) | 0));
+  hub.sendSpeed = peer => { if (hub.speedEnabled(peer) && peer.body) hub.sendPlayerDelta(peer, [[F_SPEED, Buffer.from([hub.speedFor(peer, peer.state)])]]); };
   hub.sendPlayerDelta = (peer, fields) => {
     const bitmap = Buffer.alloc(PLAYER_BITS / 8);
     fields.sort((a, b) => a[0] - b[0]);
@@ -501,12 +506,15 @@ function createPeer(hub, send, label) {
     // enquanto há pedido pendente, UpdateParkState não roda: era a demora para conseguir entrar nos spots.
     ack(bytes);
     peer.puid = key; peer.body = body; peer.version = body.readBigUInt64BE(8); peer.state = body.readUInt32LE(69);
+    // Rating de velocidade original (para devolver durante as partidas). Fora de 25..99 = offset errado: não mexe.
+    const speed = body.length > SPEED_OFFSET ? body[SPEED_OFFSET] : 0;
+    peer.baseSpeed = speed >= 25 && speed <= 99 ? speed : 0;
     if (peer.machine) body.writeBigUInt64LE(peer.machine, 45);
     hub.publishPlayer(peer, hub.config.echoPlayerOnHandshake !== false);
     hub.sendSpeed(peer);
     if (hub.config.presence) for (const other of hub.parkPeers()) if (other !== peer && other.body) peer.send(hub.playerFrame(other, peer));
     const courts = hub.publishCourts(peer);
-    return { event: 'park-player-accepted', courts, peers: hub.parkPeers().length };
+    return { event: 'park-player-accepted', courts, peers: hub.parkPeers().length, speedRating: speed, overall: body.length > 127 ? body[127] : null };
   }
 
   function movement(bytes) {
