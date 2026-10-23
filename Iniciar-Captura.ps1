@@ -1,11 +1,17 @@
-# Captura das requisições do cliente da Steam contra o SEU servidor (observação pura, modo captura).
+﻿# Captura das requisições do cliente da Steam contra o SEU servidor (observação pura, modo captura).
 # Precisa de administrador (mexe no hosts e nos certificados confiáveis do Windows). Ao fechar (Ctrl+C), desfaz tudo:
 # o hosts volta como estava e o certificado criado aqui é removido. NÃO toca no servidor de ninguém — aponta o
 # endereço do jogo para 127.0.0.1 (o seu PC) e grava o que o jogo pede em server-lab\captures\.
-param([int]$Port = 22004)
+param([int]$Port = 22004, [switch]$Elevated)
 $ErrorActionPreference = 'Stop'
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrators')) {
-  Start-Process powershell.exe -Verb RunAs -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-File', "`"$PSCommandPath`"", '-Port', $Port)
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrators')
+if (-not $isAdmin) {
+  if ($Elevated) {
+    # já tentamos elevar uma vez: não reabre (evita loop de janelas)
+    Write-Host 'Nao consegui rodar como administrador (o Windows nao liberou a elevacao). Nada foi alterado.' -ForegroundColor Red
+    Read-Host 'Enter para fechar' | Out-Null; exit 1
+  }
+  Start-Process powershell.exe -Verb RunAs -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-File', "`"$PSCommandPath`"", '-Port', $Port, '-Elevated')
   exit
 }
 $HostName = 'nba2k22-ws.2ksports.com'
